@@ -1,0 +1,195 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDocPath(userId) {
+      return /databases/$(database)/documents/users/$(userId);
+    }
+
+    function currentUserExists() {
+      return signedIn() && exists(userDocPath(request.auth.uid));
+    }
+
+    function currentUserRole() {
+      return currentUserExists()
+        ? get(userDocPath(request.auth.uid)).data.role
+        : null;
+    }
+
+    function isSuperAdmin() {
+      return currentUserRole() == "super_admin";
+    }
+
+    function isAdmin() {
+      return currentUserRole() == "admin";
+    }
+
+    function isOwnUser(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isAssignedAdminForUser(userId) {
+      return isAdmin()
+        && exists(userDocPath(userId))
+        && get(userDocPath(userId)).data.assignedAdminId == request.auth.uid;
+    }
+
+    function canReadUser(userId) {
+      return isOwnUser(userId)
+        || isSuperAdmin()
+        || (isAdmin() && resource.data.assignedAdminId == request.auth.uid);
+    }
+
+    match /users/{userId} {
+      allow create: if isOwnUser(userId)
+        && request.resource.data.keys().hasOnly([
+          "name",
+          "phone",
+          "email",
+          "role",
+          "status",
+          "isActive",
+          "joinedAt",
+          "language"
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.phone is string
+        && request.resource.data.email is string
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role == "member"
+        && request.resource.data.status == "pending"
+        && request.resource.data.isActive == false;
+
+      allow read: if canReadUser(userId);
+
+      allow update: if isSuperAdmin()
+        || (
+          isOwnUser(userId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            "name",
+            "phone",
+            "language"
+          ])
+          && request.resource.data.name is string
+          && request.resource.data.phone is string
+          && (!request.resource.data.keys().hasAny(["language"]) || request.resource.data.language is string)
+        );
+
+      allow delete: if isSuperAdmin();
+    }
+
+    match /months/{monthId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    match /assignments/{assignmentId} {
+      allow read: if isSuperAdmin()
+        || (signedIn() && (
+          resource.data.adminId == request.auth.uid
+          || resource.data.memberId == request.auth.uid
+        ));
+
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    match /payments/{paymentId} {
+      allow read: if signedIn() && (
+        resource.data.userId == request.auth.uid
+        || isSuperAdmin()
+        || isAssignedAdminForUser(resource.data.userId)
+      );
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly([
+          "userId",
+          "monthId",
+          "amount",
+          "penaltyAmount",
+          "screenshotUrl",
+          "status",
+          "submittedAt",
+          "isLate"
+        ])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.monthId is string
+        && request.resource.data.amount is number
+        && request.resource.data.penaltyAmount is number
+        && request.resource.data.screenshotUrl is string
+        && request.resource.data.isLate is bool
+        && request.resource.data.status == "pending";
+
+      allow update: if isSuperAdmin()
+        || (
+          isAssignedAdminForUser(resource.data.userId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            "status",
+            "adminComment",
+            "verifiedBy",
+            "verifiedAt"
+          ])
+          && request.resource.data.verifiedBy == request.auth.uid
+        );
+
+      allow delete: if isSuperAdmin();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if signedIn() && (
+        resource.data.userId == request.auth.uid
+        || isSuperAdmin()
+        || isAssignedAdminForUser(resource.data.userId)
+      );
+
+      allow create: if isSuperAdmin()
+        || (
+          isAdmin()
+          && request.resource.data.keys().hasOnly([
+            "userId",
+            "type",
+            "title",
+            "message",
+            "isRead",
+            "createdAt"
+          ])
+          && request.resource.data.userId is string
+          && isAssignedAdminForUser(request.resource.data.userId)
+          && request.resource.data.type is string
+          && request.resource.data.message is string
+          && request.resource.data.isRead == false
+        );
+
+      allow update: if (
+        signedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["isRead"])
+        && request.resource.data.isRead == true
+      ) || isSuperAdmin();
+
+      allow delete: if isSuperAdmin();
+    }
+
+    match /announcements/{announcementId} {
+      allow read: if signedIn() && (
+        isSuperAdmin()
+        || resource.data.target == "all"
+        || (resource.data.target == "members" && currentUserRole() == "member")
+        || (resource.data.target == "admins" && currentUserRole() == "admin")
+      );
+
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
