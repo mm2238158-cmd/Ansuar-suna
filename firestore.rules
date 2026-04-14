@@ -116,13 +116,15 @@ service cloud.firestore {
           "penaltyAmount",
           "screenshotUrl",
           "status",
-          "submittedAt"
+          "submittedAt",
+          "isLate"
         ])
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.monthId is string
         && request.resource.data.amount is number
         && request.resource.data.penaltyAmount is number
         && request.resource.data.screenshotUrl is string
+        && request.resource.data.isLate is bool
         && request.resource.data.status == "pending";
 
       allow update: if isSuperAdmin()
@@ -130,7 +132,7 @@ service cloud.firestore {
           isAssignedAdminForUser(resource.data.userId)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             "status",
-            "comment",
+            "adminComment",
             "verifiedBy",
             "verifiedAt"
           ])
@@ -161,7 +163,6 @@ service cloud.firestore {
           && request.resource.data.userId is string
           && isAssignedAdminForUser(request.resource.data.userId)
           && request.resource.data.type is string
-          && request.resource.data.title is string
           && request.resource.data.message is string
           && request.resource.data.isRead == false
         );
