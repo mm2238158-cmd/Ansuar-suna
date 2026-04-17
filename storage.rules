@@ -1,0 +1,47 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDocPath(userId) {
+      return /databases/(default)/documents/users/$(userId);
+    }
+
+    function currentUserRole() {
+      return signedIn() && firestore.exists(userDocPath(request.auth.uid))
+        ? firestore.get(userDocPath(request.auth.uid)).data.role
+        : null;
+    }
+
+    function isSuperAdmin() {
+      return currentUserRole() == "super_admin";
+    }
+
+    function isAssignedAdminForUser(userId) {
+      return currentUserRole() == "admin"
+        && firestore.exists(userDocPath(userId))
+        && firestore.get(userDocPath(userId)).data.assignedAdminId == request.auth.uid;
+    }
+
+    match /payments/{userId}/{fileName} {
+      allow read: if signedIn() && (
+        request.auth.uid == userId
+        || isSuperAdmin()
+        || isAssignedAdminForUser(userId)
+      );
+
+      allow create: if signedIn()
+        && request.auth.uid == userId
+        && request.resource.size < 1 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+
+      allow update, delete: if isSuperAdmin();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
