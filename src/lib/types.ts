@@ -18,6 +18,7 @@ export interface AppUser {
   isActive: boolean;
   joinedAt: Timestamp;
   language?: Language;
+  isFounder?: boolean;
 }
 
 export interface Month {

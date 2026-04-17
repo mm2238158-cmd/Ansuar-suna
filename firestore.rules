@@ -65,8 +65,8 @@ service cloud.firestore {
 
       allow read: if canReadUser(userId);
 
-      allow update: if isSuperAdmin()
-        || (
+      allow update: if (
+          // Owner self-edit (profile fields only)
           isOwnUser(userId)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             "name",
@@ -76,9 +76,28 @@ service cloud.firestore {
           && request.resource.data.name is string
           && request.resource.data.phone is string
           && (!request.resource.data.keys().hasAny(["language"]) || request.resource.data.language is string)
+        ) || (
+          // Super admin governance
+          isSuperAdmin()
+          // isFounder is immutable from the app
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(["isFounder"])
+          // Cannot modify a founder unless you are that founder
+          && (resource.data.get("isFounder", false) == false || isOwnUser(userId))
+          // Super admin cannot change own role/status/isActive (self-protection)
+          && (
+            !isOwnUser(userId)
+            || !request.resource.data.diff(resource.data).affectedKeys().hasAny(["role", "status", "isActive"])
+          )
+          // Only the founder can mint new super_admins
+          && (
+            request.resource.data.role != "super_admin"
+            || resource.data.role == "super_admin"
+            || get(userDocPath(request.auth.uid)).data.get("isFounder", false) == true
+          )
         );
 
-      allow delete: if isSuperAdmin();
+      allow delete: if isSuperAdmin()
+        && resource.data.get("isFounder", false) == false;
     }
 
     match /months/{monthId} {
