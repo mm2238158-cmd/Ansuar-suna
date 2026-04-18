@@ -42,17 +42,32 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md shadow-lg border-border/50">
-        <CardHeader className="text-center space-y-4">
+    <div
+      className="min-h-screen flex items-center justify-center p-4"
+      style={{
+        background:
+          "radial-gradient(circle at 20% 0%, hsl(var(--primary) / 0.12), transparent 50%), radial-gradient(circle at 80% 100%, hsl(var(--primary) / 0.08), transparent 50%), hsl(var(--background))",
+      }}
+    >
+      <Card className="w-full max-w-md shadow-2xl border-border/40 backdrop-blur">
+        <CardHeader className="text-center space-y-5 pt-8">
           <div className="flex justify-center">
-            <img src={logo} alt="Ansuarusuna" className="h-20 w-20 rounded-full object-cover shadow-md" />
+            <div className="relative">
+              <div className="absolute inset-0 rounded-full bg-primary/20 blur-xl" />
+              <img
+                src={logo}
+                alt="Ansuarusuna"
+                className="relative h-24 w-24 rounded-full object-cover shadow-lg ring-4 ring-primary/20"
+              />
+            </div>
           </div>
-          <CardTitle className="text-2xl font-display">{t.common.appName}</CardTitle>
-          <CardDescription>{t.auth.login}</CardDescription>
+          <div className="space-y-1.5">
+            <CardTitle className="text-2xl font-display">{t.common.appName}</CardTitle>
+            <CardDescription className="text-sm">{t.auth.login}</CardDescription>
+          </div>
         </CardHeader>
         <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-5 pt-2">
             <div className="space-y-2">
               <label className="text-sm font-medium">{t.auth.email}</label>
               <Input
@@ -61,6 +76,7 @@ const Login = () => {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 placeholder="email@example.com"
+                className="h-11"
               />
             </div>
             <div className="space-y-2">
@@ -71,14 +87,15 @@ const Login = () => {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 placeholder="••••••••"
+                className="h-11"
               />
             </div>
             <Link to="/forgot-password" className="text-sm text-primary hover:underline block text-right">
               {t.auth.forgotPassword}
             </Link>
           </CardContent>
-          <CardFooter className="flex flex-col gap-3">
-            <Button type="submit" className="w-full" disabled={loading}>
+          <CardFooter className="flex flex-col gap-4 pb-8">
+            <Button type="submit" className="w-full h-11 shadow-md" disabled={loading}>
               {loading ? t.common.loading : t.auth.login}
             </Button>
             <div className="relative w-full">
@@ -89,7 +106,7 @@ const Login = () => {
                 <span className="bg-card px-2 text-muted-foreground">{t.auth.orContinueWith}</span>
               </div>
             </div>
-            <Button type="button" variant="outline" className="w-full" onClick={handleGoogle} disabled={loading}>
+            <Button type="button" variant="outline" className="w-full h-11" onClick={handleGoogle} disabled={loading}>
               <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
                 <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>

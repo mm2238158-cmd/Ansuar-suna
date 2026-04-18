@@ -33,8 +33,8 @@ const BottomNav = () => {
   const tabs = role === "super_admin" ? superAdminTabs : role === "admin" ? adminTabs : memberTabs;
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-card shadow-lg md:hidden">
-      <div className="flex items-center justify-around py-2">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t bg-card/95 backdrop-blur shadow-[0_-4px_12px_-4px_hsl(var(--foreground)/0.1)] md:hidden">
+      <div className="flex items-center justify-around py-2 px-1 safe-area-pb">
         {tabs.map((tab) => (
           <NavLink
             key={tab.to}
@@ -42,13 +42,19 @@ const BottomNav = () => {
             end={tab.to === "/"}
             className={({ isActive }) =>
               cn(
-                "flex flex-col items-center gap-1 px-3 py-1.5 text-xs transition-colors",
-                isActive ? "text-primary font-semibold" : "text-muted-foreground"
+                "flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-xl text-[11px] transition-all min-w-[64px]",
+                isActive
+                  ? "bg-primary/15 text-primary font-semibold scale-105"
+                  : "text-foreground/60 hover:text-foreground"
               )
             }
           >
-            <tab.icon className="h-5 w-5" />
-            <span>{tab.label}</span>
+            {({ isActive }) => (
+              <>
+                <tab.icon className={cn("transition-all", isActive ? "h-6 w-6" : "h-5 w-5")} strokeWidth={isActive ? 2.5 : 2} />
+                <span className="leading-tight">{tab.label}</span>
+              </>
+            )}
           </NavLink>
         ))}
       </div>

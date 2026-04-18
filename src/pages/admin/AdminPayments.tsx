@@ -10,7 +10,7 @@ import type { Payment, AppUser as UserType, Month } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { CheckCircle, XCircle, Eye } from "lucide-react";
 
 const AdminPayments = () => {
@@ -23,6 +23,7 @@ const AdminPayments = () => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [comment, setComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -32,7 +33,6 @@ const AdminPayments = () => {
       const memberIds = assignSnap.docs.map((d) => d.data().memberId);
       if (memberIds.length === 0) return;
 
-      // Fetch users
       const usersMap: Record<string, UserType> = {};
       for (let i = 0; i < memberIds.length; i += 10) {
         const batch = memberIds.slice(i, i + 10);
@@ -42,7 +42,6 @@ const AdminPayments = () => {
       }
       setUsers(usersMap);
 
-      // Fetch payments
       let allPayments: Payment[] = [];
       for (let i = 0; i < memberIds.length; i += 10) {
         const batch = memberIds.slice(i, i + 10);
@@ -60,20 +59,37 @@ const AdminPayments = () => {
     fetchData();
   }, [appUser]);
 
-  const handleAction = async (paymentId: string, status: "approved" | "rejected") => {
+  const openReview = (p: Payment) => {
+    setSelectedPayment(p);
+    setComment(p.adminComment || "");
+  };
+
+  const closeReview = () => {
+    setSelectedPayment(null);
+    setComment("");
+  };
+
+  const handleAction = async (status: "approved" | "rejected") => {
+    if (!selectedPayment) return;
+    if (status === "rejected" && !comment.trim()) {
+      toast({ title: t.admin.rejectRequiresComment, variant: "destructive" });
+      return;
+    }
+    setSubmitting(true);
     try {
-      await updateDoc(doc(db, "payments", paymentId), {
+      await updateDoc(doc(db, "payments", selectedPayment.id), {
         status,
         verifiedBy: appUser?.id,
         verifiedAt: Timestamp.now(),
         adminComment: comment || undefined,
       });
-      setPayments((prev) => prev.map((p) => (p.id === paymentId ? { ...p, status, adminComment: comment } : p)));
-      setSelectedPayment(null);
-      setComment("");
-      toast({ title: `Payment ${status}` });
+      setPayments((prev) => prev.map((p) => (p.id === selectedPayment.id ? { ...p, status, adminComment: comment } : p)));
+      toast({ title: status === "approved" ? `✓ ${t.status.approved}` : `✗ ${t.status.rejected}` });
+      closeReview();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -113,7 +129,7 @@ const AdminPayments = () => {
       {/* Mobile view */}
       <div className="md:hidden space-y-3">
         {filtered.map((p) => (
-          <Card key={p.id}>
+          <Card key={p.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => openReview(p)}>
             <CardContent className="p-4 space-y-2">
               <div className="flex justify-between items-start">
                 <div>
@@ -125,19 +141,9 @@ const AdminPayments = () => {
                   {statusBadge(p.status)}
                 </div>
               </div>
-              {p.status === "pending" && (
-                <div className="flex gap-2 pt-2">
-                  <Button size="sm" className="flex-1 gap-1" onClick={() => handleAction(p.id, "approved")}>
-                    <CheckCircle className="h-3 w-3" /> {t.common.approve}
-                  </Button>
-                  <Button size="sm" variant="destructive" className="flex-1 gap-1" onClick={() => { setSelectedPayment(p); }}>
-                    <XCircle className="h-3 w-3" /> {t.common.reject}
-                  </Button>
-                  <Button size="sm" variant="outline" asChild>
-                    <a href={p.screenshotUrl} target="_blank" rel="noreferrer"><Eye className="h-3 w-3" /></a>
-                  </Button>
-                </div>
-              )}
+              <Button size="sm" variant="outline" className="w-full gap-1.5" onClick={(e) => { e.stopPropagation(); openReview(p); }}>
+                <Eye className="h-3.5 w-3.5" /> {t.admin.reviewPayment}
+              </Button>
             </CardContent>
           </Card>
         ))}
@@ -166,21 +172,9 @@ const AdminPayments = () => {
                   <TableCell>{p.submittedAt.toDate().toLocaleDateString()}</TableCell>
                   <TableCell>{statusBadge(p.status)}</TableCell>
                   <TableCell>
-                    <div className="flex gap-1">
-                      <Button size="sm" variant="ghost" asChild>
-                        <a href={p.screenshotUrl} target="_blank" rel="noreferrer"><Eye className="h-4 w-4" /></a>
-                      </Button>
-                      {p.status === "pending" && (
-                        <>
-                          <Button size="sm" variant="ghost" onClick={() => handleAction(p.id, "approved")}>
-                            <CheckCircle className="h-4 w-4 text-success" />
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => setSelectedPayment(p)}>
-                            <XCircle className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </>
-                      )}
-                    </div>
+                    <Button size="sm" variant="outline" className="gap-1.5" onClick={() => openReview(p)}>
+                      <Eye className="h-3.5 w-3.5" /> {t.admin.reviewPayment}
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}
@@ -189,27 +183,84 @@ const AdminPayments = () => {
         </Card>
       </div>
 
-      {/* Reject Dialog */}
-      <Dialog open={!!selectedPayment} onOpenChange={() => setSelectedPayment(null)}>
-        <DialogContent>
+      {/* Review Dialog */}
+      <Dialog open={!!selectedPayment} onOpenChange={(o) => !o && closeReview()}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{t.common.reject}</DialogTitle>
+            <DialogTitle>{t.admin.reviewPayment}</DialogTitle>
+            <DialogDescription>{t.admin.viewScreenshot}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <Textarea
-              placeholder={t.admin.commentPlaceholder}
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-            />
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setSelectedPayment(null)} className="flex-1">
-                {t.common.cancel}
-              </Button>
-              <Button variant="destructive" onClick={() => selectedPayment && handleAction(selectedPayment.id, "rejected")} className="flex-1">
-                {t.common.reject}
-              </Button>
+          {selectedPayment && (
+            <div className="space-y-4">
+              {/* Meta */}
+              <div className="grid grid-cols-2 gap-3 text-sm rounded-lg bg-muted/50 p-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">{t.admin.memberName}</p>
+                  <p className="font-medium">{users[selectedPayment.userId]?.name || "Unknown"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">{t.member.month}</p>
+                  <p className="font-medium">{months[selectedPayment.monthId]?.name}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">{t.common.amount}</p>
+                  <p className="font-semibold text-primary">{selectedPayment.amount.toLocaleString()} ETB</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">{t.admin.paymentDate}</p>
+                  <p className="font-medium">{selectedPayment.submittedAt.toDate().toLocaleDateString()}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-xs text-muted-foreground mb-1">{t.common.status}</p>
+                  {statusBadge(selectedPayment.status)}
+                </div>
+              </div>
+
+              {/* Screenshot */}
+              <div className="rounded-lg overflow-hidden border bg-muted/30">
+                <a href={selectedPayment.screenshotUrl} target="_blank" rel="noreferrer">
+                  <img
+                    src={selectedPayment.screenshotUrl}
+                    alt="Payment screenshot"
+                    className="w-full max-h-[400px] object-contain bg-background"
+                  />
+                </a>
+              </div>
+
+              {/* Comment */}
+              <Textarea
+                placeholder={t.admin.commentPlaceholder}
+                value={comment}
+                onChange={(e) => setComment(e.target.value)}
+                rows={3}
+              />
+
+              {/* Actions */}
+              {selectedPayment.status === "pending" ? (
+                <div className="flex gap-2">
+                  <Button
+                    variant="destructive"
+                    className="flex-1 gap-1.5"
+                    onClick={() => handleAction("rejected")}
+                    disabled={submitting}
+                  >
+                    <XCircle className="h-4 w-4" /> {t.common.reject}
+                  </Button>
+                  <Button
+                    className="flex-1 gap-1.5 bg-success hover:bg-success/90 text-success-foreground"
+                    onClick={() => handleAction("approved")}
+                    disabled={submitting}
+                  >
+                    <CheckCircle className="h-4 w-4" /> {t.common.approve}
+                  </Button>
+                </div>
+              ) : (
+                <Button variant="outline" className="w-full" onClick={closeReview}>
+                  {t.common.close}
+                </Button>
+              )}
             </div>
-          </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
