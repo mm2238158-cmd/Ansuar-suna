@@ -1,57 +1,61 @@
 
 
-# Plan — Role Governance Safeguards + Storage Permissions
+# Plan — Payment Review Modal + Mobile UI Polish
 
-## Decisions locked in
-- **Governance**: Founder-only mints super_admins
-- **Founder**: Manual `isFounder: true` flag set in Firebase Console
-- **Audit logs**: Deferred
+## Part 1 — Payment Review Modal (admin & super_admin)
 
-## What gets built
+Both `AdminPayments.tsx` and `SuperAdminPayments.tsx` need a unified review experience:
+- Click a payment row/card → opens **Review Dialog** showing the screenshot inline (image preview, not a new tab)
+- Inside the dialog: member name, month, amount, submitted date, current status, optional comment textarea
+- Two action buttons: **Approve** and **Reject** (Reject requires a comment)
+- After action → status updates, dialog closes, list refreshes
+- Super admins get the same approve/reject powers as admins (currently they only view)
 
-### 1. Storage rules (fixes the upload error)
-Create `storage.rules` with RBAC:
-- Members can write to `payments/{their_uid}/...` only — images only, < 1 MB
-- Members read their own screenshots
-- Assigned admins read screenshots of their assigned members
-- Super admins: full read
-- Everything else: deny
+This forces reviewers to *see* the screenshot before deciding, fixing the issue that approve/reject was possible without viewing.
 
-Register in `firebase.json` so `firebase deploy --only storage` works.
+## Part 2 — Mobile UI Improvements
 
-### 2. Firestore rules hardening (`firestore.rules`)
-Add to the `users/{userId}` update branch:
-- **Founder protection**: any change to a user with `isFounder: true` is denied unless the requester *is* that founder
-- **Self role/status protection**: a super_admin cannot modify their own `role`, `status`, or `isActive`
-- **Founder-only super_admin minting**: only the founder can set `role == "super_admin"` on any user (other super_admins can manage member/admin roles only)
-- **`isFounder` is immutable**: cannot be set or cleared via app writes (must be done in console)
+### A. AppLayout header (`src/components/layout/AppLayout.tsx`)
+- Replace plain name text with **Avatar component** on the right (initials fallback, gold ring)
+- Tap avatar → navigate to `/profile`
+- Tighter padding, sticky header with subtle shadow
 
-Last-super-admin guard stays in the UI (Firestore rules can't count documents inline).
+### B. MemberHome (`src/pages/member/MemberHome.tsx`)
+- **Countdown card**: large card showing `Days : Hours : Minutes : Seconds` ticking each second
+- **Progress bar** of remaining time vs total month duration; bar color shifts:
+  - green (>50% time left) → yellow (10–50%) → red (<10% or overdue)
+- **Status pill** at top of current month card: Pending / Approved / Late / Not Submitted with matching color
+- **Upload button**: larger (h-14), full width, stronger shadow, icon + text, primary gradient feel
+- **Quick link cards** ("Payment History" / "Notifications"):
+  - Add description line ("View all your past payments" / "Stay updated with announcements")
+  - Add right-arrow `→` (ChevronRight icon) indicator
+  - Hover lift effect
+- **Summary section** (new, above quick links): 3 small stat cards
+  - Paid months (count of approved payments)
+  - Pending (count of pending)
+  - Missed (count of late/rejected or unpaid open months)
+  - Each with icon, number, label, color-coded background
 
-### 3. Type update (`src/lib/types.ts`)
-Add `isFounder?: boolean` to `AppUser`.
+### C. BottomNav (`src/components/layout/BottomNav.tsx`)
+- Active tab: filled background pill in primary/10, primary text+icon, slightly larger icon
+- Inactive: brighter muted color (foreground/70 instead of muted-foreground) for better contrast
+- Add subtle top divider shadow
 
-### 4. UI safeguards (`src/pages/superadmin/SuperAdminUsers.tsx`)
-- Disable role dropdown + deactivate button on the **current user's own row**
-- Disable role dropdown + deactivate button on any **founder** row (unless current user is the founder)
-- Show a small "Founder" / "You" badge on those rows
-- **Confirmation dialog** before promoting any user to `super_admin` (lists implications)
-- **Pre-flight check**: before demoting or deactivating any super_admin, count active super_admins; if it's the last one, refuse with a toast
-- Hide the "promote to super_admin" option entirely when the current user is not the founder
+### D. Login (`src/pages/Login.tsx`)
+- Increase card max-width to `max-w-md`, more vertical padding, bigger logo halo
+- Stronger shadow (`shadow-2xl`), subtle border glow
+- More generous spacing between fields (space-y-5)
+- Slight gold-tinted gradient background behind the card
 
-### 5. Deployment instructions
-After code lands, you run:
-- Firestore rules: paste updated `firestore.rules` in console **or** `firebase deploy --only firestore:rules`
-- Storage rules: paste new `storage.rules` in Firebase Console → Storage → Rules **or** `firebase deploy --only storage`
-- One-time: in Firestore console, edit your founder user document and add `isFounder: true`
+## Files Touched
+- `src/components/layout/AppLayout.tsx` — avatar header
+- `src/components/layout/BottomNav.tsx` — stronger active state
+- `src/pages/member/MemberHome.tsx` — countdown, progress, summary, big upload, quick-link improvements, status indicator
+- `src/pages/Login.tsx` — card polish, spacing
+- `src/pages/admin/AdminPayments.tsx` — review modal with inline screenshot + actions
+- `src/pages/superadmin/SuperAdminPayments.tsx` — review modal with inline screenshot + approve/reject
 
-## Files touched
-- `storage.rules` (new)
-- `firebase.json` (add storage block)
-- `firestore.rules` (governance rules)
-- `src/lib/types.ts` (add `isFounder`)
-- `src/pages/superadmin/SuperAdminUsers.tsx` (UI guards + confirmation + last-admin check)
-
-## Out of scope (per your decision)
-- `auditLogs` collection + viewer — deferred to a follow-up task
+## Out of Scope
+- Desktop sidebar redesign (mobile-focused request)
+- i18n string additions beyond what already exists (will reuse existing keys; add a couple of new ones to `en.ts`/`am.ts`/`om.ts` for "paid months", "missed", "review payment" descriptions)
 
