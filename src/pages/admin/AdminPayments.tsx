@@ -3,7 +3,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { collection, query, where, getDocs, doc, updateDoc, Timestamp, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Payment, AppUser as UserType, Month } from "@/lib/types";
@@ -94,7 +94,22 @@ const AdminPayments = () => {
     }
   };
 
-  const filtered = statusFilter === "all" ? payments : payments.filter((p) => p.status === statusFilter);
+  const filtered = useMemo(() => {
+    const list = statusFilter === "all" ? payments : payments.filter((p) => p.status === statusFilter);
+    if (statusFilter === "all") {
+      // Surface pending first
+      const order: Record<string, number> = { pending: 0, late: 1, rejected: 2, approved: 3 };
+      return [...list].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+    }
+    return list;
+  }, [payments, statusFilter]);
+
+  const rowTone = (status: string) => {
+    if (status === "pending") return "bg-warning/5 border-l-4 border-l-warning";
+    if (status === "approved") return "opacity-70";
+    if (status === "rejected") return "bg-destructive/5";
+    return "";
+  };
 
   const statusBadge = (status: string) => {
     const colors: Record<string, string> = {
