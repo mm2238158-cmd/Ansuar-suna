@@ -145,8 +145,13 @@ const AdminPayments = () => {
       {/* Mobile view */}
       <div className="md:hidden space-y-3">
         {filtered.map((p) => (
-          <Card key={p.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => openReview(p)}>
+          <Card key={p.id} className={`cursor-pointer hover:shadow-md transition-all ${rowTone(p.status)}`} onClick={() => openReview(p)}>
             <CardContent className="p-4 space-y-2">
+              {p.status === "pending" && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-warning/15 text-warning uppercase tracking-wide">
+                  <Clock className="h-2.5 w-2.5" /> {t.admin.actionNeeded}
+                </span>
+              )}
               <div className="flex justify-between items-start">
                 <div>
                   <p className="font-medium text-sm">{users[p.userId]?.name || "Unknown"}</p>
@@ -181,7 +186,7 @@ const AdminPayments = () => {
             </TableHeader>
             <TableBody>
               {filtered.map((p) => (
-                <TableRow key={p.id}>
+                <TableRow key={p.id} className={rowTone(p.status)}>
                   <TableCell>{users[p.userId]?.name || "Unknown"}</TableCell>
                   <TableCell>{months[p.monthId]?.name}</TableCell>
                   <TableCell className="font-medium">{p.amount.toLocaleString()} ETB</TableCell>
