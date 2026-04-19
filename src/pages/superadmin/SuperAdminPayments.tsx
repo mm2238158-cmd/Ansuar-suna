@@ -63,13 +63,14 @@ const SuperAdminPayments = () => {
     }
     setSubmitting(true);
     try {
-      await updateDoc(doc(db, "payments", selectedPayment.id), {
+      const updates: Record<string, unknown> = {
         status,
         verifiedBy: appUser?.id,
         verifiedAt: Timestamp.now(),
-        adminComment: comment || undefined,
-      });
-      setPayments((prev) => prev.map((p) => (p.id === selectedPayment.id ? { ...p, status, adminComment: comment } : p)));
+      };
+      if (comment.trim()) updates.adminComment = comment.trim();
+      await updateDoc(doc(db, "payments", selectedPayment.id), updates);
+      setPayments((prev) => prev.map((p) => (p.id === selectedPayment.id ? { ...p, status, adminComment: comment.trim() || p.adminComment } : p)));
       toast({ title: status === "approved" ? `✓ ${t.status.approved}` : `✗ ${t.status.rejected}` });
       closeReview();
     } catch (err: any) {
