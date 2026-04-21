@@ -7,7 +7,7 @@ import { db } from "@/lib/firebase";
 import type { Payment } from "@/lib/types";
 import {
   Users, CheckCircle, Clock, XCircle, DollarSign, UserPlus, ShieldCheck,
-  Plus, ArrowRight, TrendingUp, TrendingDown,
+  Plus, ArrowRight, TrendingUp, TrendingDown, ShieldAlert,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -163,7 +163,7 @@ const SuperAdminDashboard = () => {
         <h2 className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
           {t.superAdmin.quickActions}
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
           <Link to="/payments">
             <Button variant="outline" className="w-full justify-start gap-2 h-12">
               <Plus className="h-4 w-4 text-primary" /> {t.superAdmin.createMonth}
@@ -177,6 +177,11 @@ const SuperAdminDashboard = () => {
           <Link to="/payments">
             <Button variant="outline" className="w-full justify-start gap-2 h-12">
               <Clock className="h-4 w-4 text-warning" /> {t.superAdmin.viewPending}
+            </Button>
+          </Link>
+          <Link to="/data-health">
+            <Button variant="outline" className="w-full justify-start gap-2 h-12">
+              <ShieldAlert className="h-4 w-4 text-primary" /> {t.nav.dataHealth}
             </Button>
           </Link>
         </div>

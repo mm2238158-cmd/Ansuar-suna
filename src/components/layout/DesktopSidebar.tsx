@@ -1,4 +1,4 @@
-import { Home, CreditCard, Bell, User, LayoutDashboard, Users, Settings, LogOut } from "lucide-react";
+import { Home, CreditCard, Bell, User, LayoutDashboard, Users, Settings, LogOut, ShieldAlert } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -29,6 +29,7 @@ const DesktopSidebar = () => {
     { to: "/payments", icon: CreditCard, label: t.nav.payments },
     { to: "/users", icon: Users, label: t.nav.users },
     { to: "/settings", icon: Settings, label: t.nav.settings },
+    { to: "/data-health", icon: ShieldAlert, label: t.nav.dataHealth },
   ];
 
   const links = role === "super_admin" ? superAdminLinks : role === "admin" ? adminLinks : memberLinks;

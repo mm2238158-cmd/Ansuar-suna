@@ -29,6 +29,7 @@ import SuperAdminDashboard from "./pages/superadmin/SuperAdminDashboard";
 import SuperAdminPayments from "./pages/superadmin/SuperAdminPayments";
 import SuperAdminUsers from "./pages/superadmin/SuperAdminUsers";
 import SuperAdminSettings from "./pages/superadmin/SuperAdminSettings";
+import SuperAdminDataHealth from "./pages/superadmin/SuperAdminDataHealth";
 
 const queryClient = new QueryClient();
 
@@ -61,6 +62,7 @@ const RoleRoutes = () => {
         <Route path="/payments" element={<ProtectedRoute><SuperAdminPayments /></ProtectedRoute>} />
         <Route path="/users" element={<ProtectedRoute><SuperAdminUsers /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><SuperAdminSettings /></ProtectedRoute>} />
+        <Route path="/data-health" element={<ProtectedRoute><SuperAdminDataHealth /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
         <Route path="*" element={<NotFound />} />
