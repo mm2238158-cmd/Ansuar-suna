@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { CalendarPlus, Megaphone, Settings2 } from "lucide-react";
+import { getPeriodKey } from "@/lib/month-utils";
 
 const SuperAdminSettings = () => {
   const { appUser } = useAuth();
@@ -63,13 +64,24 @@ const SuperAdminSettings = () => {
   const createMonth = async () => {
     if (!monthName || !monthAmount || !monthDeadline) return;
     try {
+      const selectedDate = new Date(monthDeadline);
+      const deadlineEndOfDay = new Date(
+        selectedDate.getFullYear(),
+        selectedDate.getMonth(),
+        selectedDate.getDate(),
+        23,
+        59,
+        59,
+        999
+      );
       await addDoc(collection(db, "months"), {
         name: monthName,
         amount: Number(monthAmount),
-        deadline: Timestamp.fromDate(new Date(monthDeadline)),
+        deadline: Timestamp.fromDate(deadlineEndOfDay),
         status: "open",
         createdBy: appUser?.id,
         createdAt: Timestamp.now(),
+        periodKey: getPeriodKey(selectedDate),
       });
       toast({ title: "Month created" });
       setMonthName("");

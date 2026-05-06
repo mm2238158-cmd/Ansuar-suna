@@ -11,14 +11,14 @@ import {
 } from "firebase/auth";
 import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
 import { auth, db, googleProvider } from "@/lib/firebase";
-import type { AppUser } from "@/lib/types";
+import type { AppUser, Gender } from "@/lib/types";
 
 interface AuthContextType {
   firebaseUser: User | null;
   appUser: AppUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string, phone: string) => Promise<void>;
+  register: (email: string, password: string, name: string, phone: string, gender: Gender) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -66,12 +66,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await signInWithEmailAndPassword(auth, email, password);
   };
 
-  const register = async (email: string, password: string, name: string, phone: string) => {
+  const register = async (email: string, password: string, name: string, phone: string, gender: Gender) => {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     await setDoc(doc(db, "users", cred.user.uid), {
       name,
       phone,
       email,
+      gender,
       role: "member",
       status: "pending",
       isActive: false,
@@ -83,15 +84,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const cred = await signInWithPopup(auth, googleProvider);
     const existing = await fetchAppUser(cred.user.uid);
     if (!existing) {
-      await setDoc(doc(db, "users", cred.user.uid), {
-        name: cred.user.displayName || "",
-        phone: "",
-        email: cred.user.email || "",
-        role: "member",
-        status: "pending",
-        isActive: false,
-        joinedAt: Timestamp.now(),
-      });
+      await signOut(auth);
+      throw new Error("Please sign up first using the registration form.");
     }
   };
 

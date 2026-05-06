@@ -49,6 +49,7 @@ service cloud.firestore {
           "name",
           "phone",
           "email",
+          "gender",
           "role",
           "status",
           "isActive",
@@ -58,6 +59,8 @@ service cloud.firestore {
         && request.resource.data.name is string
         && request.resource.data.phone is string
         && request.resource.data.email is string
+        && request.resource.data.gender is string
+        && request.resource.data.gender in ["male", "female"]
         && request.resource.data.email == request.auth.token.email
         && request.resource.data.role == "member"
         && request.resource.data.status == "pending"
@@ -71,11 +74,13 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             "name",
             "phone",
-            "language"
+            "language",
+            "gender"
           ])
           && request.resource.data.name is string
           && request.resource.data.phone is string
           && (!request.resource.data.keys().hasAny(["language"]) || request.resource.data.language is string)
+          && (!request.resource.data.keys().hasAny(["gender"]) || request.resource.data.gender in ["male", "female"])
         ) || (
           // Super admin governance
           isSuperAdmin()

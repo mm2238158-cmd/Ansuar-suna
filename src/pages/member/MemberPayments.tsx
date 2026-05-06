@@ -13,6 +13,7 @@ import { Upload, Image as ImageIcon } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { resolveMonthWindow } from "@/lib/month-utils";
 
 const MemberPayments = () => {
   const { appUser } = useAuth();
@@ -64,7 +65,7 @@ const MemberPayments = () => {
         status: "pending",
         screenshotUrl: url,
         submittedAt: Timestamp.now(),
-        isLate: new Date() > currentMonth.deadline.toDate(),
+        isLate: Date.now() > resolveMonthWindow(currentMonth).deadlineMs,
         penaltyAmount: 0,
       });
 

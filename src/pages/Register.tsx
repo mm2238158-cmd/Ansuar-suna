@@ -7,6 +7,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { useToast } from "@/hooks/use-toast";
 import logo from "@/assets/logo.png";
 import { Link, useNavigate } from "react-router-dom";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { Gender } from "@/lib/types";
 
 const Register = () => {
   const { register } = useAuth();
@@ -16,6 +18,7 @@ const Register = () => {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [gender, setGender] = useState<Gender | "">("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -26,9 +29,13 @@ const Register = () => {
       toast({ title: "Error", description: "Passwords do not match", variant: "destructive" });
       return;
     }
+    if (!gender) {
+      toast({ title: "Error", description: "Please select gender", variant: "destructive" });
+      return;
+    }
     setLoading(true);
     try {
-      await register(email, password, name, phone);
+      await register(email, password, name, phone, gender);
       toast({ title: t.auth.registerSuccess });
       navigate("/login");
     } catch (err: any) {
@@ -61,6 +68,18 @@ const Register = () => {
             <div className="space-y-2">
               <label className="text-sm font-medium">{t.auth.email}</label>
               <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="email@example.com" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Gender</label>
+              <Select value={gender} onValueChange={(value) => setGender(value as Gender)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select gender" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="male">Male</SelectItem>
+                  <SelectItem value="female">Female</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">{t.auth.password}</label>

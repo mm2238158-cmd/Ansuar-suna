@@ -9,6 +9,7 @@ import { db } from "@/lib/firebase";
 import type { Month, Payment } from "@/lib/types";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { resolveMonthWindow } from "@/lib/month-utils";
 
 const MemberHome = () => {
   const { appUser } = useAuth();
@@ -19,7 +20,6 @@ const MemberHome = () => {
   const [openMonthsCount, setOpenMonthsCount] = useState(0);
   const [nextMonth, setNextMonth] = useState<Month | null>(null);
   const [now, setNow] = useState(Date.now());
-  const [monthStartMs, setMonthStartMs] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -36,7 +36,6 @@ const MemberHome = () => {
       if (!monthsSnap.empty) {
         const m = { id: monthsSnap.docs[0].id, ...monthsSnap.docs[0].data() } as Month;
         setCurrentMonth(m);
-        setMonthStartMs(m.createdAt.toDate().getTime());
 
         const payQ = query(
           collection(db, "payments"),
@@ -80,7 +79,7 @@ const MemberHome = () => {
 
   const countdown = useMemo(() => {
     if (!currentMonth) return null;
-    const deadline = currentMonth.deadline.toDate().getTime();
+    const { deadlineMs: deadline } = resolveMonthWindow(currentMonth);
     const diff = deadline - now;
     const overdue = diff <= 0;
     const abs = Math.abs(diff);
@@ -92,8 +91,8 @@ const MemberHome = () => {
   }, [currentMonth, now]);
 
   const progress = useMemo(() => {
-    if (!currentMonth || !monthStartMs) return { pct: 0, pctRemaining: 0, color: "bg-success" };
-    const deadline = currentMonth.deadline.toDate().getTime();
+    if (!currentMonth) return { pct: 0, pctRemaining: 0, color: "bg-success" };
+    const { startMs: monthStartMs, deadlineMs: deadline } = resolveMonthWindow(currentMonth);
     const total = deadline - monthStartMs;
     if (total <= 0) return { pct: 0, pctRemaining: 0, color: "bg-destructive" };
     const elapsed = now - monthStartMs;
@@ -103,7 +102,7 @@ const MemberHome = () => {
     if (pctRemaining < 10) color = "bg-destructive";
     else if (pctRemaining <= 50) color = "bg-warning";
     return { pct: pctElapsed, pctRemaining, color };
-  }, [currentMonth, monthStartMs, now]);
+  }, [currentMonth, now]);
 
   const summary = useMemo(() => {
     const paid = allPayments.filter((p) => p.status === "approved").length;

@@ -2,6 +2,7 @@ import { Timestamp } from "firebase/firestore";
 
 export type UserRole = "member" | "admin" | "super_admin";
 export type UserStatus = "pending" | "active" | "inactive";
+export type Gender = "male" | "female";
 export type PaymentStatus = "pending" | "approved" | "rejected" | "late";
 export type MonthStatus = "open" | "closed";
 export type AnnouncementTarget = "all" | "members" | "admins";
@@ -19,6 +20,7 @@ export interface AppUser {
   joinedAt: Timestamp;
   language?: Language;
   isFounder?: boolean;
+  gender?: Gender;
 }
 
 export interface Month {
@@ -29,6 +31,7 @@ export interface Month {
   status: MonthStatus;
   createdBy: string;
   createdAt: Timestamp;
+  periodKey?: string;
 }
 
 export interface Payment {

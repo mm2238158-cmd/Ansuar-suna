@@ -44,9 +44,36 @@ const SuperAdminUsers = () => {
     return false;
   };
 
-  const approveUser = async (userId: string) => {
-    await updateDoc(doc(db, "users", userId), { status: "active", isActive: true });
-    toast({ title: "User approved" });
+  const assignMemberToAdmin = async (memberId: string, adminId: string) => {
+    const existingQ = query(collection(db, "assignments"), where("memberId", "==", memberId));
+    const existingSnap = await getDocs(existingQ);
+    await Promise.all(existingSnap.docs.map((d) => deleteDoc(d.ref)));
+
+    await addDoc(collection(db, "assignments"), {
+      adminId,
+      memberId,
+      assignedAt: Timestamp.now(),
+    });
+    await updateDoc(doc(db, "users", memberId), { assignedAdminId: adminId });
+  };
+
+  const getEligibleAdmins = (member?: UserType | null) => {
+    if (!member) return admins.filter((a) => a.isActive);
+    const activeAdmins = admins.filter((a) => a.isActive);
+    if (!member.gender) return activeAdmins;
+    return activeAdmins.filter((a) => a.gender === member.gender);
+  };
+
+  const approveUser = async (user: UserType) => {
+    await updateDoc(doc(db, "users", user.id), { status: "active", isActive: true });
+
+    const eligibleAdmins = getEligibleAdmins(user);
+    if (eligibleAdmins.length > 0) {
+      await assignMemberToAdmin(user.id, eligibleAdmins[0].id);
+      toast({ title: "User approved and admin assigned" });
+    } else {
+      toast({ title: "User approved", description: "No matching active admin found. Please assign manually." });
+    }
     fetchUsers();
   };
 
@@ -100,16 +127,7 @@ const SuperAdminUsers = () => {
 
   const assignAdmin = async () => {
     if (!assignDialog || !selectedAdmin) return;
-    const existingQ = query(collection(db, "assignments"), where("memberId", "==", assignDialog.id));
-    const existingSnap = await getDocs(existingQ);
-    await Promise.all(existingSnap.docs.map((d) => deleteDoc(d.ref)));
-
-    await addDoc(collection(db, "assignments"), {
-      adminId: selectedAdmin,
-      memberId: assignDialog.id,
-      assignedAt: Timestamp.now(),
-    });
-    await updateDoc(doc(db, "users", assignDialog.id), { assignedAdminId: selectedAdmin });
+    await assignMemberToAdmin(assignDialog.id, selectedAdmin);
     toast({ title: "Admin assigned" });
     setAssignDialog(null);
     setSelectedAdmin("");
@@ -183,7 +201,7 @@ const SuperAdminUsers = () => {
                 </div>
                 <div className="flex gap-2 flex-wrap">
                   {u.status === "pending" && (
-                    <Button size="sm" onClick={() => approveUser(u.id)} className="gap-1">
+                    <Button size="sm" onClick={() => approveUser(u)} className="gap-1">
                       <CheckCircle className="h-3 w-3" /> {t.superAdmin.approveUser}
                     </Button>
                   )}
@@ -244,7 +262,7 @@ const SuperAdminUsers = () => {
                     <TableCell>
                       <div className="flex gap-1">
                         {u.status === "pending" && (
-                          <Button size="sm" variant="ghost" onClick={() => approveUser(u.id)}>
+                          <Button size="sm" variant="ghost" onClick={() => approveUser(u)}>
                             <UserCheck className="h-4 w-4 text-success" />
                           </Button>
                         )}
@@ -280,7 +298,7 @@ const SuperAdminUsers = () => {
                 <SelectValue placeholder="Select an admin" />
               </SelectTrigger>
               <SelectContent>
-                {admins.map((a) => (
+                {getEligibleAdmins(assignDialog).map((a) => (
                   <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
                 ))}
               </SelectContent>

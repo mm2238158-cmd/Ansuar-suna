@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import AppLayout from "@/components/layout/AppLayout";
+import { useEnsureCurrentMonth } from "@/hooks/useEnsureCurrentMonth";
 
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -53,6 +54,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 const RoleRoutes = () => {
   const { appUser } = useAuth();
+  useEnsureCurrentMonth(appUser);
   const role = appUser?.role;
 
   if (role === "super_admin") {
