@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { addDoc, collection, getDocs, limit, orderBy, query, updateDoc, where } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, getDocs, limit, query, updateDoc, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { AppUser, Month, Settings } from "@/lib/types";
 import { getDeadlineDate, getMonthName, getPeriodKey, isCurrentPeriod, toTimestamp } from "@/lib/month-utils";
@@ -24,10 +24,10 @@ export const useEnsureCurrentMonth = (appUser: AppUser | null) => {
       const currentOpen = openMonths.docs.find((d) => isCurrentPeriod({ id: d.id, ...d.data() } as Month));
       if (currentOpen) return;
 
-      const settingsSnap = await getDocs(query(collection(db, "settings"), limit(1)));
-      const settings = settingsSnap.empty
-        ? null
-        : ({ id: settingsSnap.docs[0].id, ...settingsSnap.docs[0].data() } as Settings);
+      const settingsSnap = await getDoc(doc(db, "settings", "global"));
+      const settings = settingsSnap.exists()
+        ? ({ id: settingsSnap.id, ...settingsSnap.data() } as Settings)
+        : null;
 
       const monthlyAmount = settings?.monthlyAmount ?? DEFAULT_MONTHLY_AMOUNT;
       const paymentDeadlineDay = settings?.paymentDeadlineDay ?? DEFAULT_DEADLINE_DAY;

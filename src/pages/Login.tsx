@@ -29,13 +29,18 @@ const Login = () => {
     }
   };
 
+  const authErrorMessage = (err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    return message === "SIGN_UP_REQUIRED" ? t.auth.signUpRequired : message;
+  };
+
   const handleGoogle = async () => {
     setLoading(true);
     try {
       await loginWithGoogle();
       toast({ title: t.auth.loginSuccess });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Error", description: authErrorMessage(err), variant: "destructive" });
     } finally {
       setLoading(false);
     }

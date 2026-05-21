@@ -30,7 +30,7 @@ const Register = () => {
       return;
     }
     if (!gender) {
-      toast({ title: "Error", description: "Please select gender", variant: "destructive" });
+      toast({ title: "Error", description: t.auth.genderRequired, variant: "destructive" });
       return;
     }
     setLoading(true);
@@ -70,14 +70,14 @@ const Register = () => {
               <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="email@example.com" />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Gender</label>
+              <label className="text-sm font-medium">{t.auth.gender}</label>
               <Select value={gender} onValueChange={(value) => setGender(value as Gender)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select gender" />
+                  <SelectValue placeholder={t.auth.selectGender} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="male">Male</SelectItem>
-                  <SelectItem value="female">Female</SelectItem>
+                  <SelectItem value="male">{t.auth.genderMale}</SelectItem>
+                  <SelectItem value="female">{t.auth.genderFemale}</SelectItem>
                 </SelectContent>
               </Select>
             </div>

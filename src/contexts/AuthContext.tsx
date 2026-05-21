@@ -85,7 +85,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const existing = await fetchAppUser(cred.user.uid);
     if (!existing) {
       await signOut(auth);
-      throw new Error("Please sign up first using the registration form.");
+      throw new Error("SIGN_UP_REQUIRED");
     }
   };
 

@@ -5,12 +5,17 @@ import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { collection, getDocs, doc, updateDoc, query, where, addDoc, Timestamp, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { AppUser as UserType } from "@/lib/types";
+import type { AppUser as UserType, Gender } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { CheckCircle, XCircle, Shield, User, UserCheck, Crown } from "lucide-react";
+import {
+  fetchAdminAssignmentCounts,
+  pickLeastLoadedAdmin,
+  sortAdminsByLoad,
+} from "@/lib/assignment-utils";
 
 const SuperAdminUsers = () => {
   const { t } = useLanguage();
@@ -22,15 +27,21 @@ const SuperAdminUsers = () => {
   const [assignDialog, setAssignDialog] = useState<UserType | null>(null);
   const [selectedAdmin, setSelectedAdmin] = useState("");
   const [promoteDialog, setPromoteDialog] = useState<{ user: UserType; newRole: string } | null>(null);
+  const [adminRoleDialog, setAdminRoleDialog] = useState<{ user: UserType; gender: Gender | "" } | null>(null);
+  const [adminMemberCounts, setAdminMemberCounts] = useState<Record<string, number>>({});
 
   const isFounder = !!appUser?.isFounder;
   const currentUid = appUser?.id;
 
   const fetchUsers = async () => {
-    const snap = await getDocs(collection(db, "users"));
+    const [snap, counts] = await Promise.all([
+      getDocs(collection(db, "users")),
+      fetchAdminAssignmentCounts(),
+    ]);
     const all = snap.docs.map((d) => ({ id: d.id, ...d.data() } as UserType));
     setUsers(all);
     setAdmins(all.filter((u) => u.role === "admin"));
+    setAdminMemberCounts(counts);
   };
 
   useEffect(() => { fetchUsers(); }, []);
@@ -68,11 +79,13 @@ const SuperAdminUsers = () => {
     await updateDoc(doc(db, "users", user.id), { status: "active", isActive: true });
 
     const eligibleAdmins = getEligibleAdmins(user);
-    if (eligibleAdmins.length > 0) {
-      await assignMemberToAdmin(user.id, eligibleAdmins[0].id);
-      toast({ title: "User approved and admin assigned" });
+    const counts = await fetchAdminAssignmentCounts();
+    const bestAdmin = pickLeastLoadedAdmin(eligibleAdmins, counts);
+    if (bestAdmin) {
+      await assignMemberToAdmin(user.id, bestAdmin.id);
+      toast({ title: t.superAdmin.approvedWithAssignment });
     } else {
-      toast({ title: "User approved", description: "No matching active admin found. Please assign manually." });
+      toast({ title: t.superAdmin.approvedNoAdmin });
     }
     fetchUsers();
   };
@@ -91,9 +104,30 @@ const SuperAdminUsers = () => {
     fetchUsers();
   };
 
+  const updateUserGender = async (u: UserType, gender: Gender) => {
+    if (isLocked(u)) return;
+    await updateDoc(doc(db, "users", u.id), { gender });
+    toast({ title: t.superAdmin.genderUpdated });
+    fetchUsers();
+  };
+
   const performRoleChange = async (u: UserType, role: string) => {
     await updateDoc(doc(db, "users", u.id), { role });
     toast({ title: "Role updated" });
+    fetchUsers();
+  };
+
+  const confirmAdminRole = async () => {
+    if (!adminRoleDialog || !adminRoleDialog.gender) {
+      toast({ title: "Error", description: t.superAdmin.genderRequiredForAdmin, variant: "destructive" });
+      return;
+    }
+    await updateDoc(doc(db, "users", adminRoleDialog.user.id), {
+      gender: adminRoleDialog.gender,
+      role: "admin",
+    });
+    toast({ title: "Role updated" });
+    setAdminRoleDialog(null);
     fetchUsers();
   };
 
@@ -114,6 +148,10 @@ const SuperAdminUsers = () => {
     }
     if (role === "super_admin") {
       setPromoteDialog({ user: u, newRole: role });
+      return;
+    }
+    if (role === "admin" && !u.gender) {
+      setAdminRoleDialog({ user: u, gender: "" });
       return;
     }
     await performRoleChange(u, role);
@@ -199,6 +237,23 @@ const SuperAdminUsers = () => {
                   </div>
                   {statusBadge(u)}
                 </div>
+                {!locked && u.role !== "super_admin" && (
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">{t.superAdmin.gender}</label>
+                    <Select
+                      value={u.gender || ""}
+                      onValueChange={(v) => updateUserGender(u, v as Gender)}
+                    >
+                      <SelectTrigger className="h-8">
+                        <SelectValue placeholder={t.auth.selectGender} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="male">{t.auth.genderMale}</SelectItem>
+                        <SelectItem value="female">{t.auth.genderFemale}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="flex gap-2 flex-wrap">
                   {u.status === "pending" && (
                     <Button size="sm" onClick={() => approveUser(u)} className="gap-1">
@@ -232,6 +287,7 @@ const SuperAdminUsers = () => {
                 <TableHead>{t.auth.email}</TableHead>
                 <TableHead>{t.auth.phone}</TableHead>
                 <TableHead>Role</TableHead>
+                <TableHead>{t.superAdmin.gender}</TableHead>
                 <TableHead>{t.common.status}</TableHead>
                 <TableHead>{t.common.actions}</TableHead>
               </TableRow>
@@ -257,6 +313,24 @@ const SuperAdminUsers = () => {
                           {isFounder && <SelectItem value="super_admin">Super Admin</SelectItem>}
                         </SelectContent>
                       </Select>
+                    </TableCell>
+                    <TableCell>
+                      {locked || u.role === "super_admin" ? (
+                        <span className="text-xs text-muted-foreground capitalize">{u.gender || "—"}</span>
+                      ) : (
+                        <Select
+                          value={u.gender || ""}
+                          onValueChange={(v) => updateUserGender(u, v as Gender)}
+                        >
+                          <SelectTrigger className="w-28 h-8">
+                            <SelectValue placeholder={t.auth.selectGender} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="male">{t.auth.genderMale}</SelectItem>
+                            <SelectItem value="female">{t.auth.genderFemale}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
                     </TableCell>
                     <TableCell>{statusBadge(u)}</TableCell>
                     <TableCell>
@@ -295,12 +369,17 @@ const SuperAdminUsers = () => {
           <div className="space-y-4">
             <Select value={selectedAdmin} onValueChange={setSelectedAdmin}>
               <SelectTrigger>
-                <SelectValue placeholder="Select an admin" />
+                <SelectValue placeholder={t.superAdmin.selectAdmin} />
               </SelectTrigger>
               <SelectContent>
-                {getEligibleAdmins(assignDialog).map((a) => (
-                  <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                ))}
+                {sortAdminsByLoad(getEligibleAdmins(assignDialog), adminMemberCounts).map((a) => {
+                  const count = adminMemberCounts[a.id] ?? 0;
+                  return (
+                    <SelectItem key={a.id} value={a.id}>
+                      {a.name} ({count} {t.superAdmin.adminMemberLoad})
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
             <div className="flex gap-2">
@@ -308,6 +387,37 @@ const SuperAdminUsers = () => {
               <Button onClick={assignAdmin} className="flex-1" disabled={!selectedAdmin}>{t.common.confirm}</Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Promote to Admin (requires gender) */}
+      <Dialog open={!!adminRoleDialog} onOpenChange={() => setAdminRoleDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t.superAdmin.promoteToAdmin}</DialogTitle>
+            <DialogDescription>{t.superAdmin.promoteToAdminDesc}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm font-medium">{adminRoleDialog?.user.name}</p>
+            <Select
+              value={adminRoleDialog?.gender || ""}
+              onValueChange={(v) =>
+                setAdminRoleDialog((prev) => (prev ? { ...prev, gender: v as Gender } : null))
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={t.auth.selectGender} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="male">{t.auth.genderMale}</SelectItem>
+                <SelectItem value="female">{t.auth.genderFemale}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAdminRoleDialog(null)}>{t.common.cancel}</Button>
+            <Button onClick={confirmAdminRole} disabled={!adminRoleDialog?.gender}>{t.common.confirm}</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
