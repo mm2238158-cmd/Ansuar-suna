@@ -10,12 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { CheckCircle, XCircle, Shield, User, UserCheck, Crown } from "lucide-react";
-import {
-  fetchAdminAssignmentCounts,
-  pickLeastLoadedAdmin,
-  sortAdminsByLoad,
-} from "@/lib/assignment-utils";
+import { CheckCircle, XCircle, Shield, User, Crown } from "lucide-react";
+import { fetchAdminAssignmentCounts, sortAdminsByLoad } from "@/lib/assignment-utils";
 
 const SuperAdminUsers = () => {
   const { t } = useLanguage();
@@ -73,21 +69,6 @@ const SuperAdminUsers = () => {
     const activeAdmins = admins.filter((a) => a.isActive);
     if (!member.gender) return activeAdmins;
     return activeAdmins.filter((a) => a.gender === member.gender);
-  };
-
-  const approveUser = async (user: UserType) => {
-    await updateDoc(doc(db, "users", user.id), { status: "active", isActive: true });
-
-    const eligibleAdmins = getEligibleAdmins(user);
-    const counts = await fetchAdminAssignmentCounts();
-    const bestAdmin = pickLeastLoadedAdmin(eligibleAdmins, counts);
-    if (bestAdmin) {
-      await assignMemberToAdmin(user.id, bestAdmin.id);
-      toast({ title: t.superAdmin.approvedWithAssignment });
-    } else {
-      toast({ title: t.superAdmin.approvedNoAdmin });
-    }
-    fetchUsers();
   };
 
   const toggleActive = async (u: UserType) => {
@@ -256,9 +237,9 @@ const SuperAdminUsers = () => {
                 )}
                 <div className="flex gap-2 flex-wrap">
                   {u.status === "pending" && (
-                    <Button size="sm" onClick={() => approveUser(u)} className="gap-1">
-                      <CheckCircle className="h-3 w-3" /> {t.superAdmin.approveUser}
-                    </Button>
+                    <span className="text-xs text-muted-foreground px-2 py-1 rounded-md bg-muted">
+                      {t.auth.verifyAccountTitle}
+                    </span>
                   )}
                   {u.status !== "pending" && (
                     <Button size="sm" variant="outline" onClick={() => toggleActive(u)} disabled={locked}>
@@ -335,11 +316,6 @@ const SuperAdminUsers = () => {
                     <TableCell>{statusBadge(u)}</TableCell>
                     <TableCell>
                       <div className="flex gap-1">
-                        {u.status === "pending" && (
-                          <Button size="sm" variant="ghost" onClick={() => approveUser(u)}>
-                            <UserCheck className="h-4 w-4 text-success" />
-                          </Button>
-                        )}
                         {u.status !== "pending" && (
                           <Button size="sm" variant="ghost" onClick={() => toggleActive(u)} disabled={locked}>
                             {u.isActive ? <XCircle className="h-4 w-4 text-destructive" /> : <CheckCircle className="h-4 w-4 text-success" />}

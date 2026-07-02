@@ -39,8 +39,8 @@ const Register = () => {
     setLoading(true);
     try {
       await register(email, password, name, phone, gender);
-      toast({ title: t.auth.registerSuccess });
-      navigate("/login");
+      toast({ title: t.auth.verifyEmailSent });
+      navigate("/verify-account");
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {

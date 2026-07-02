@@ -21,6 +21,9 @@ export interface AppUser {
   language?: Language;
   isFounder?: boolean;
   gender?: Gender;
+  emailVerified?: boolean;
+  phoneVerified?: boolean;
+  activatedAt?: Timestamp;
 }
 
 export interface Month {

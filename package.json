@@ -10,7 +10,11 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "functions:build": "npm --prefix functions run build",
+    "functions:deploy": "firebase deploy --only functions",
+    "rules:deploy": "firebase deploy --only firestore:rules",
+    "deploy:auth": "firebase deploy --only functions,firestore:rules"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

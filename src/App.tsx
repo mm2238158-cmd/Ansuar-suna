@@ -12,6 +12,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import PendingApproval from "./pages/PendingApproval";
+import VerifyAccount from "./pages/VerifyAccount";
 import NotFound from "./pages/NotFound";
 
 // Member
@@ -46,7 +47,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   }
 
   if (!firebaseUser) return <Navigate to="/login" replace />;
-  if (!appUser || appUser.status === "pending") return <PendingApproval />;
+  if (!appUser || appUser.status === "pending") return <Navigate to="/verify-account" replace />;
   if (appUser.status === "inactive") return <PendingApproval />;
 
   return <AppLayout>{children}</AppLayout>;
@@ -97,6 +98,38 @@ const RoleRoutes = () => {
   );
 };
 
+const AuthEntryRedirect = () => {
+  const { appUser, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  if (appUser?.status === "pending") return <Navigate to="/verify-account" replace />;
+  return <Navigate to="/" replace />;
+};
+
+const VerifyAccountRoute = () => {
+  const { firebaseUser, appUser, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  if (!firebaseUser) return <Navigate to="/login" replace />;
+  if (appUser?.status === "active") return <Navigate to="/" replace />;
+
+  return <VerifyAccount />;
+};
+
 const AppRoutes = () => {
   const { firebaseUser, loading } = useAuth();
 
@@ -110,8 +143,9 @@ const AppRoutes = () => {
 
   return (
     <Routes>
-      <Route path="/login" element={firebaseUser ? <Navigate to="/" replace /> : <Login />} />
-      <Route path="/register" element={firebaseUser ? <Navigate to="/" replace /> : <Register />} />
+      <Route path="/login" element={firebaseUser ? <AuthEntryRedirect /> : <Login />} />
+      <Route path="/register" element={firebaseUser ? <AuthEntryRedirect /> : <Register />} />
+      <Route path="/verify-account" element={<VerifyAccountRoute />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/*" element={<RoleRoutes />} />
     </Routes>

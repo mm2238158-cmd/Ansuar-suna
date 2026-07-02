@@ -54,7 +54,9 @@ service cloud.firestore {
           "status",
           "isActive",
           "joinedAt",
-          "language"
+          "language",
+          "emailVerified",
+          "phoneVerified"
         ])
         && request.resource.data.name is string
         && request.resource.data.phone is string
@@ -64,7 +66,9 @@ service cloud.firestore {
         && request.resource.data.email == request.auth.token.email
         && request.resource.data.role == "member"
         && request.resource.data.status == "pending"
-        && request.resource.data.isActive == false;
+        && request.resource.data.isActive == false
+        && request.resource.data.emailVerified == false
+        && request.resource.data.phoneVerified == false;
 
       allow read: if canReadUser(userId);
 
@@ -81,9 +85,13 @@ service cloud.firestore {
           && request.resource.data.phone is string
           && (!request.resource.data.keys().hasAny(["language"]) || request.resource.data.language is string)
           && (!request.resource.data.keys().hasAny(["gender"]) || request.resource.data.gender in ["male", "female"])
+          && request.resource.data.status == resource.data.status
+          && request.resource.data.isActive == resource.data.isActive
         ) || (
           // Super admin governance
           isSuperAdmin()
+          // Pending users must activate via Cloud Function (email + phone verification)
+          && !(resource.data.status == "pending" && request.resource.data.status == "active")
           // isFounder is immutable from the app
           && !request.resource.data.diff(resource.data).affectedKeys().hasAny(["isFounder"])
           // Cannot modify a founder unless you are that founder
