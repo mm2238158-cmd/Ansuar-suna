@@ -11,6 +11,8 @@ import { CheckCircle2, Mail, Phone, LogOut } from "lucide-react";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { auth } from "@/lib/firebase";
 import { getCallableErrorMessage } from "@/lib/callable-errors";
+import { getAuthErrorMessage } from "@/lib/auth-errors";
+import { RECAPTCHA_CONTAINER_ID } from "@/lib/phone-utils";
 
 const VerifyAccount = () => {
   const {
@@ -19,7 +21,7 @@ const VerifyAccount = () => {
     logout,
     reloadFirebaseUser,
     resendEmailVerification,
-    initPhoneRecaptcha,
+    clearPhoneRecaptcha,
     sendPhoneOtp,
     confirmPhoneOtp,
     activateAccount,
@@ -36,13 +38,16 @@ const VerifyAccount = () => {
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    initPhoneRecaptcha("recaptcha-container");
-  }, [initPhoneRecaptcha]);
+  const hostname = typeof window !== "undefined" ? window.location.hostname : "";
+  const showDomainHint = hostname !== "localhost" && hostname !== "127.0.0.1";
 
   useEffect(() => {
     setPhone(appUser?.phone || "");
   }, [appUser?.phone]);
+
+  useEffect(() => {
+    return () => clearPhoneRecaptcha();
+  }, [clearPhoneRecaptcha]);
 
   const syncVerificationState = async () => {
     await reloadFirebaseUser();
@@ -72,8 +77,11 @@ const VerifyAccount = () => {
       await resendEmailVerification();
       toast({ title: t.auth.verifyEmailResent });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast({ title: "Error", description: message, variant: "destructive" });
+      toast({
+        title: "Error",
+        description: getAuthErrorMessage(err, t.auth),
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -99,13 +107,19 @@ const VerifyAccount = () => {
       return;
     }
     setLoading(true);
+    setOtp("");
     try {
-      await sendPhoneOtp(phone);
+      await sendPhoneOtp(phone, RECAPTCHA_CONTAINER_ID);
       setOtpSent(true);
       toast({ title: t.auth.verifyOtpSent });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast({ title: "Error", description: message, variant: "destructive" });
+      setOtpSent(false);
+      clearPhoneRecaptcha();
+      toast({
+        title: "Error",
+        description: getAuthErrorMessage(err, t.auth),
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -119,8 +133,11 @@ const VerifyAccount = () => {
       setPhoneLinked(true);
       toast({ title: t.auth.verifyPhoneConfirmed });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast({ title: "Error", description: message, variant: "destructive" });
+      toast({
+        title: "Error",
+        description: getAuthErrorMessage(err, t.auth),
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -153,7 +170,6 @@ const VerifyAccount = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div id="recaptcha-container" />
       <Card className="w-full max-w-lg shadow-lg">
         <CardHeader className="text-center space-y-3">
           <img src={logo} alt="Logo" className="h-16 w-16 mx-auto rounded-full object-cover" />
@@ -185,16 +201,30 @@ const VerifyAccount = () => {
               {phoneLinked && <CheckCircle2 className="h-4 w-4 text-success ml-auto" />}
             </div>
             <p className="text-xs text-muted-foreground">{t.auth.verifyPhoneHelp}</p>
+            {showDomainHint && (
+              <p className="text-xs text-warning bg-warning/10 border border-warning/30 rounded-md p-2">
+                {t.auth.verifyDomainHint.replace("{host}", hostname)}
+              </p>
+            )}
             <Input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="+251..."
-              disabled={phoneLinked}
+              disabled={phoneLinked || otpSent}
             />
             {!phoneLinked && (
               <>
-                <Button type="button" className="w-full" onClick={handleSendOtp} disabled={loading || otpSent}>
-                  {otpSent ? t.auth.verifyOtpSent : t.auth.verifySendOtp}
+                <div
+                  id={RECAPTCHA_CONTAINER_ID}
+                  className="flex justify-center min-h-[78px]"
+                />
+                <Button
+                  type="button"
+                  className="w-full"
+                  onClick={handleSendOtp}
+                  disabled={loading}
+                >
+                  {otpSent ? t.auth.verifyResendOtp : t.auth.verifySendOtp}
                 </Button>
                 {otpSent && (
                   <div className="space-y-3">
@@ -205,7 +235,12 @@ const VerifyAccount = () => {
                         ))}
                       </InputOTPGroup>
                     </InputOTP>
-                    <Button type="button" className="w-full" onClick={handleConfirmOtp} disabled={loading || otp.length < 6}>
+                    <Button
+                      type="button"
+                      className="w-full"
+                      onClick={handleConfirmOtp}
+                      disabled={loading || otp.length < 6}
+                    >
                       {t.auth.verifyConfirmOtp}
                     </Button>
                   </div>
