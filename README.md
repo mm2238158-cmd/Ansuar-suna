@@ -12,10 +12,15 @@ or `400 sendVerificationCode`, check the Firebase Console:
    - your Lovable preview host (`id-preview--<id>.lovable.app`)
    - any published `*.lovable.app` domain
    - your custom production domain
-3. **Authentication → Settings → reCAPTCHA Enterprise** tab — set to **OFF**
-   or **Audit only** (not Enforce). The Firebase JS SDK ships its own invisible
-   reCAPTCHA v2 for phone auth; enforce mode requires a fully configured
-   Enterprise site key and is not needed here.
+3. **Authentication → Settings → reCAPTCHA** tab:
+   - **Phone authentication enforcement mode** → `AUDIT` (or `OFF`).
+   - **SMS fraud risk threshold score** → **Don't block**. Any
+     "Block some/most/all" setting will silently drop OTP SMS on
+     localhost and preview domains because they have no device
+     signal and score high. Only tighten this after you've
+     registered a real Web site key under **Configured platform
+     site keys** and verified prod works.
+
 4. **App Check** — no provider should be registered for
    `identitytoolkit.googleapis.com` unless you also configure Enterprise above.
 5. Wait ~1 min for propagation, hard-refresh, retry.
