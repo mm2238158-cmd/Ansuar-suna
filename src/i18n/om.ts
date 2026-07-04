@@ -86,6 +86,8 @@ const om: TranslationKeys = {
     authNotSignedIn: "Itti fufuuf seenuu qabda.",
     authOtpNotSent: "Maaloo dura koodii mirkaneessaa ergi.",
     authGenericError: "Wanti tokko dogoggora. Irra deebi'i yaali.",
+    authRecaptchaEnterprise: "Mirkaneessiin bilbilaa reCAPTCHA Enterprise'n cufame. Firebase Console → Authentication → Settings → reCAPTCHA Enterprise keessatti dhiibbaa dhaamsi (yookiin Audit only godhi).",
+    authUnauthorizedDomain: "Dameen kun Firebase Auth'f hayyamame hin jiru. Authentication → Settings → Authorized domains keessatti dabaluu qabda.",
     verifyActivate: "Akkaawuntii hojjachiisi",
     verifyActivated: "Akkaawuntiin kee amma hojii irra jira!",
     verifyActivatedNoAdmin: "Akkaawuntiin hojjachaa'e. Bulchiinsi walsimu hin argamne.",
