@@ -84,6 +84,8 @@ const en = {
     authNotSignedIn: "You must be signed in to continue.",
     authOtpNotSent: "Please send a verification code first.",
     authGenericError: "Something went wrong. Please try again.",
+    authRecaptchaEnterprise: "Phone verification is blocked by reCAPTCHA Enterprise. In Firebase Console → Authentication → Settings → reCAPTCHA Enterprise, switch enforcement OFF (or Audit only).",
+    authUnauthorizedDomain: "This domain is not authorized for Firebase Auth. Add it under Authentication → Settings → Authorized domains.",
     verifyActivate: "Activate account",
     verifyActivated: "Your account is now active!",
     verifyActivatedNoAdmin: "Account activated. No matching admin was available yet.",

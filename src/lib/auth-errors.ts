@@ -5,9 +5,18 @@ type AuthMessages = TranslationKeys["auth"];
 
 export const getAuthErrorMessage = (err: unknown, messages: AuthMessages): string => {
   if (err instanceof FirebaseError) {
+    const msg = err.message || "";
+    if (/reCAPTCHA Enterprise/i.test(msg)) {
+      return messages.authRecaptchaEnterprise;
+    }
     switch (err.code) {
       case "auth/captcha-check-failed":
         return messages.authCaptchaFailed;
+      case "auth/unauthorized-domain":
+        return messages.authUnauthorizedDomain;
+      case "auth/invalid-app-credential":
+      case "auth/internal-error":
+        return messages.authRecaptchaEnterprise;
       case "auth/invalid-phone-number":
         return messages.authInvalidPhone;
       case "auth/too-many-requests":

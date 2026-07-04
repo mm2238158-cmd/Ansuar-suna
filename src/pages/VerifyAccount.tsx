@@ -214,7 +214,6 @@ const VerifyAccount = () => {
             />
             {!phoneLinked && (
               <>
-                <div id={RECAPTCHA_CONTAINER_ID} />
                 <Button
                   type="button"
                   className="w-full"
@@ -244,6 +243,8 @@ const VerifyAccount = () => {
                 )}
               </>
             )}
+            {/* reCAPTCHA container must stay mounted before Send OTP is clicked */}
+            <div id={RECAPTCHA_CONTAINER_ID} />
           </div>
 
           <Button type="button" className="w-full" onClick={handleActivate} disabled={!canActivate || loading}>

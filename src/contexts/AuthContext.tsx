@@ -89,15 +89,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const createPhoneRecaptcha = async (containerId: string) => {
     clearPhoneRecaptcha();
-    // Use invisible reCAPTCHA with Firebase's automatic handling
+    // Ensure the container is empty so a fresh widget can render after a prior failure
+    const container = typeof document !== "undefined" ? document.getElementById(containerId) : null;
+    if (container) container.innerHTML = "";
     const verifier = new RecaptchaVerifier(auth, containerId, {
       size: "invisible",
-      callback: () => {
-        console.log("reCAPTCHA verified successfully");
-      },
-      "expired-callback": () => {
-        console.log("reCAPTCHA expired, please try again");
-      },
+      callback: () => undefined,
+      "expired-callback": () => undefined,
     });
     recaptchaVerifierRef.current = verifier;
     return verifier;

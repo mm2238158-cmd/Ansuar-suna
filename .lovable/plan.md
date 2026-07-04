@@ -1,86 +1,69 @@
+# Plan — Fix Phone Verification (SMS not sending / reCAPTCHA Enterprise error)
 
+## Root cause
 
-# Plan — Member Home Refinement + Admin/SuperAdmin Polish
+The error `Failed to verify with reCAPTCHA Enterprise` + `400 sendVerificationCode` means Firebase is still trying to verify calls through **reCAPTCHA Enterprise**, but the enterprise provider is either not configured or the current origin isn't authorized.
 
-## Part 1 — MemberHome refinement (`src/pages/member/MemberHome.tsx`)
+This is **not** the App Check setting you already removed — it's a **separate** setting on the Authentication service itself:
 
-**A. Current Month card restructure** (main focus = action)
-- Header row: title + status badge inline next to amount (tighter visual grouping)
-- Amount row prominent
-- **Status feedback message** below amount based on `currentPayment.status`:
-  - approved → "Payment completed successfully" (success tone)
-  - pending → "Awaiting admin review" (warning tone)
-  - rejected → admin comment + "Please re-upload" (destructive tone)
-  - none → "Please complete your payment before deadline" (muted tone)
-- **Countdown reduced**: smaller number size (`text-lg` instead of `text-2xl`), more compact padding
-- **Progress bar** gets a label row: "Time remaining" on left, `XX% left` on right
-- **Primary action button INSIDE the card**, centered, prominent (h-14, full width, gradient + shadow):
-  - no payment → "Upload Payment" → links to `/payments?upload=true`
-  - pending → disabled "Awaiting Review" with clock icon
-  - approved → "View Receipt" (opens screenshot in new tab) — secondary style
-  - rejected → "Re-upload Payment" (destructive-toned primary)
+> Firebase Console → Authentication → Settings → **reCAPTCHA Enterprise** tab
+> ("Protect phone provider from abuse")
 
-**B. Summary cards softened**
-- Remove colored borders, use `bg-muted/30` neutral background
-- Keep colored icon + colored number only
-- Lighter visual weight, no `border-*` color rings
+When that tab is set to **Enforce** (or its site key was removed) all phone auth calls fail with exactly this error. It has to be either turned OFF (falls back to classic invisible reCAPTCHA v2 which the SDK bundles automatically — no config needed) or fully configured with a valid site key + all required domains.
 
-**C. Next Month Preview** (new small section)
-- Query the next non-open month (status `upcoming` or by `createdAt` after current) limited to 1
-- Render as compact card: "Next: <name> — <amount> ETB" with `CalendarDays` icon, muted styling
-- If none exists, hide the section
+Since you want the simple built-in flow, we'll turn it off and clean up code + docs.
 
-**D. Hierarchy adjustments**
-- Order: Summary → Current Month (with action) → Next Month preview → Quick Links
-- Reduced countdown emphasis ensures action button is the main focal point
+The client code itself (`AuthContext.createPhoneRecaptcha`, `linkWithPhoneNumber`, `VerifyAccount.tsx`) is correct — it's already using the recommended pattern. No functional rewrite needed, just a few robustness tweaks and clearer error messages.
 
-## Part 2 — AdminPayments priority visualization (`src/pages/admin/AdminPayments.tsx`)
+## What you must do in the Firebase Console (I cannot do this for you)
 
-- **Pending payments**: card/row gets `bg-warning/5 border-l-4 border-l-warning` for visual priority
-- **Approved**: muted `opacity-70` + neutral background
-- **Rejected**: subtle destructive tint `bg-destructive/5`
-- Default sort already by `submittedAt desc` — additionally re-sort filtered list so pending appears first when "all" filter is selected
-- Mobile cards: pending shows a subtle "Action needed" pill above member name
-- Desktop table: same row tinting via `className` per status
+Ordered, each step is 30 seconds.
 
-## Part 3 — SuperAdminDashboard improvements (`src/pages/superadmin/SuperAdminDashboard.tsx`)
+1. **Authentication → Sign-in method → Phone** — make sure the provider is **enabled**.
+2. **Authentication → Settings → Authorized domains** — add all of:
+   - `localhost`
+   - `ansuarusunacharityms.firebaseapp.com` (default; usually present)
+   - `id-preview--0191d12d-f5fd-4987-84e5-e3995d4c670c.lovable.app` (your current Lovable preview)
+   - Any published `*.lovable.app` domain
+   - Your custom production domain (if any)
+3. **Authentication → Settings → reCAPTCHA Enterprise** tab → set to **OFF / Audit only** (not Enforce). If it shows a site key, note it but disable enforcement. This makes phone auth fall back to the classic invisible reCAPTCHA v2 that the Firebase SDK handles automatically.
+4. **App Check** → confirm no provider is registered for the `identitytoolkit.googleapis.com` API (you said you removed it — this is the second-check).
+5. Wait ~1 minute for propagation, then hard-refresh the app.
 
-**A. Priority metrics (hero row)** — 2 large cards on top:
-- **Pending Approvals** (gold/warning gradient) — count + small caption "Members awaiting approval" + "Review now" button → `/super-admin/users?status=pending`
-- **Total Collected** (primary gradient) — large amount + caption "Across all approved payments"
+## Code changes (small, defensive)
 
-**B. Trend indicators** (lightweight, no new collection)
-- Compute approved payments in last 30 days vs prior 30 days from existing payments query (using `verifiedAt`)
-- Show small `↑ 12%` / `↓ 5%` next to Total Collected and Approved counts, color-coded
-- If no historical data, hide the indicator (no fake data)
+### `src/contexts/AuthContext.tsx`
+- Replace the vague `console.log` reCAPTCHA callbacks with silent no-ops (they leak noise in prod).
+- After a failed `linkWithPhoneNumber`, guarantee the container `<div>` is emptied so a retry can render a fresh widget (currently we clear the verifier object but Firebase leaves DOM nodes behind on some error paths, which breaks re-render).
+- Surface a friendlier error when the SDK reports the enterprise / auth-domain problem so you don't have to open DevTools next time.
 
-**C. Quick Actions section** (3 buttons in a row)
-- "Create Month" → navigates to `/super-admin/payments` (existing month management lives there)
-- "Assign Members" → navigates to `/super-admin/users`
-- "View Pending Payments" → navigates to `/super-admin/payments?status=pending`
-- Use outline/secondary variant with leading icons (`Plus`, `UserPlus`, `Clock`)
+### `src/lib/auth-errors.ts`
+- Map two more Firebase codes to translated strings:
+  - `auth/internal-error` when the message contains `"reCAPTCHA Enterprise"` → point the user to Auth Settings.
+  - `auth/unauthorized-domain` → point the user to Authorized domains.
 
-**D. Secondary metrics row** — remaining cards (Active Members, Total Admins, Approved, Pending Payments, Rejected) in smaller grid below, less visual weight
+### `src/i18n/{en,am,om}.ts`
+- Add matching keys: `authRecaptchaEnterprise`, `authUnauthorizedDomain`.
 
-**E. Spacing & hierarchy**
-- Section headers: "Priority", "Quick Actions", "Overview"
-- Consistent `space-y-6`, gold/brown accents preserved
+### `src/pages/VerifyAccount.tsx`
+- Render the reCAPTCHA container **outside** the conditional block so it's always mounted the moment the section is visible. Prevents a race where "Send OTP" is clicked before the container is in the DOM after a state flip.
+- Show the friendlier error text from `auth-errors` verbatim (already wired via toast).
 
-## Part 4 — i18n additions
-Add keys to `src/i18n/{en,am,om}.ts`:
-- `member.statusMessage.approved/pending/rejected/notSubmitted`
-- `member.viewReceipt`, `member.reupload`, `member.awaitingReview`, `member.timeRemaining`, `member.percentLeft`, `member.nextMonth`
-- `superAdmin.priorityMetrics`, `superAdmin.quickActions`, `superAdmin.overview`, `superAdmin.createMonth`, `superAdmin.assignMembers`, `superAdmin.viewPending`, `superAdmin.reviewNow`, `superAdmin.vsPrev30`
-- `admin.actionNeeded`
+### `.env`
+- Remove the stale `VITE_RECAPTCHA_SITE_KEY` — it is unused (nothing in `src/` references it) and confuses future debugging. If you keep it, it's harmless but misleading.
+
+### `README.md` (short section)
+- Add a "Phone verification setup" block documenting the 5 console steps above so this doesn't get re-broken later.
 
 ## Files touched
-- `src/pages/member/MemberHome.tsx` — restructure + status messages + next month + softer summary
-- `src/pages/admin/AdminPayments.tsx` — priority tinting + sort
-- `src/pages/superadmin/SuperAdminDashboard.tsx` — hero metrics, trends, quick actions, hierarchy
-- `src/i18n/en.ts`, `src/i18n/am.ts`, `src/i18n/om.ts` — new keys
+- `src/contexts/AuthContext.tsx` — silent recaptcha callbacks, container cleanup on error
+- `src/lib/auth-errors.ts` — map enterprise + unauthorized-domain errors
+- `src/i18n/en.ts`, `am.ts`, `om.ts` — 2 new keys each
+- `src/pages/VerifyAccount.tsx` — always-mounted container, no logic change
+- `.env` — drop unused key
+- `README.md` — 10-line setup note
 
 ## Out of scope
-- New Firestore collections or schema changes
-- Backend trend tracking (computed client-side from existing payments)
-- Desktop sidebar redesign
-
+- Migrating to reCAPTCHA Enterprise properly (only relevant if abuse becomes a problem; today the classic v2 SDK-managed flow is enough)
+- Changing from `linkWithPhoneNumber` to any other flow — the current approach is correct for "verify an existing user's phone"
+- Cloud Functions changes — `activateAccount` already correctly requires `authUser.phoneNumber`
