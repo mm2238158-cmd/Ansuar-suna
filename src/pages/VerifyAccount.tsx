@@ -214,7 +214,6 @@ const VerifyAccount = () => {
             />
             {!phoneLinked && (
               <>
-                <div id={RECAPTCHA_CONTAINER_ID} />
                 <Button
                   type="button"
                   className="w-full"
