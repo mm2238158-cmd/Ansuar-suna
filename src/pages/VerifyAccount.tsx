@@ -37,6 +37,8 @@ const VerifyAccount = () => {
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
+  const [recaptchaKey, setRecaptchaKey] = useState(0);
+
 
   const hostname = typeof window !== "undefined" ? window.location.hostname : "";
   const showDomainHint = hostname !== "localhost" && hostname !== "127.0.0.1";
@@ -115,7 +117,9 @@ const VerifyAccount = () => {
     } catch (err: unknown) {
       setOtpSent(false);
       clearPhoneRecaptcha();
+      setRecaptchaKey((k) => k + 1);
       toast({
+
         title: "Error",
         description: getAuthErrorMessage(err, t.auth),
         variant: "destructive",
@@ -244,8 +248,10 @@ const VerifyAccount = () => {
               </>
             )}
             {/* reCAPTCHA container must stay mounted before Send OTP is clicked */}
-            <div id={RECAPTCHA_CONTAINER_ID} />
+            {/* reCAPTCHA container must stay mounted before Send OTP is clicked; key bump forces a fresh DOM node on retry */}
+            <div key={recaptchaKey} id={RECAPTCHA_CONTAINER_ID} />
           </div>
+
 
           <Button type="button" className="w-full" onClick={handleActivate} disabled={!canActivate || loading}>
             {loading ? t.common.loading : t.auth.verifyActivate}

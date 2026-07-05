@@ -1,69 +1,52 @@
-# Plan — Fix Phone Verification (SMS not sending / reCAPTCHA Enterprise error)
+## Diagnosis
 
-## Root cause
+Your screenshot shows `Firebase: Error (auth/error-code:-39)` right after the console message *"Failed to verify with reCAPTCHA Enterprise. Automatically triggering the reCAPTCHA v2 flow…"*.
 
-The error `Failed to verify with reCAPTCHA Enterprise` + `400 sendVerificationCode` means Firebase is still trying to verify calls through **reCAPTCHA Enterprise**, but the enterprise provider is either not configured or the current origin isn't authorized.
+- The "Automatically triggering v2" line is **informational**, not the failure.
+- `auth/error-code:-39` is Firebase's internal reCAPTCHA error meaning **both** the Enterprise path **and** the v2 fallback failed to produce a valid token for this domain. It is almost always a Firebase Console / domain configuration problem, not an app-code bug.
 
-This is **not** the App Check setting you already removed — it's a **separate** setting on the Authentication service itself:
+The current lovable preview domain (`*.lovableproject.com` / `id-preview--….lovable.app`) is very likely **not** in Firebase's **Authorized domains** list, and/or the project has **reCAPTCHA Enterprise enforcement = Enforce** without a real Web site key that covers this domain. When that happens Firebase tries Enterprise → fails → falls back to v2 → v2 also can't run on an unauthorized domain → `-39`.
 
-> Firebase Console → Authentication → Settings → **reCAPTCHA Enterprise** tab
-> ("Protect phone provider from abuse")
+## Plan
 
-When that tab is set to **Enforce** (or its site key was removed) all phone auth calls fail with exactly this error. It has to be either turned OFF (falls back to classic invisible reCAPTCHA v2 which the SDK bundles automatically — no config needed) or fully configured with a valid site key + all required domains.
-
-Since you want the simple built-in flow, we'll turn it off and clean up code + docs.
-
-The client code itself (`AuthContext.createPhoneRecaptcha`, `linkWithPhoneNumber`, `VerifyAccount.tsx`) is correct — it's already using the recommended pattern. No functional rewrite needed, just a few robustness tweaks and clearer error messages.
-
-## What you must do in the Firebase Console (I cannot do this for you)
-
-Ordered, each step is 30 seconds.
-
-1. **Authentication → Sign-in method → Phone** — make sure the provider is **enabled**.
-2. **Authentication → Settings → Authorized domains** — add all of:
+### 1. Firebase Console fixes (required — no code can replace these)
+1. **Authentication → Settings → Authorized domains** — add:
    - `localhost`
-   - `ansuarusunacharityms.firebaseapp.com` (default; usually present)
-   - `id-preview--0191d12d-f5fd-4987-84e5-e3995d4c670c.lovable.app` (your current Lovable preview)
-   - Any published `*.lovable.app` domain
-   - Your custom production domain (if any)
-3. **Authentication → Settings → reCAPTCHA Enterprise** tab → set to **OFF / Audit only** (not Enforce). If it shows a site key, note it but disable enforcement. This makes phone auth fall back to the classic invisible reCAPTCHA v2 that the Firebase SDK handles automatically.
-4. **App Check** → confirm no provider is registered for the `identitytoolkit.googleapis.com` API (you said you removed it — this is the second-check).
-5. Wait ~1 minute for propagation, then hard-refresh the app.
+   - `id-preview--0191d12d-f5fd-4987-84e5-e3995d4c670c.lovable.app`
+   - `0191d12d-f5fd-4987-84e5-e3995d4c670c.lovableproject.com`
+   - your production custom domain (when live)
+2. **Authentication → Settings → reCAPTCHA Enterprise** — set enforcement to **Audit only** (or OFF) until SMS is confirmed working. Only switch back to **Enforce** after you register a real Web reCAPTCHA site key covering all the domains above.
+3. **Authentication → Settings → SMS region policy** — make sure Ethiopia (+251) and any other target countries are **allowed**.
+4. **Authentication → Settings → SMS fraud protection** — keep on **Don't block** while testing.
 
-## Code changes (small, defensive)
+### 2. Code hardening (small, targeted)
+Only changes that improve resilience and error messaging — no behavior change to the verification flow itself:
 
-### `src/contexts/AuthContext.tsx`
-- Replace the vague `console.log` reCAPTCHA callbacks with silent no-ops (they leak noise in prod).
-- After a failed `linkWithPhoneNumber`, guarantee the container `<div>` is emptied so a retry can render a fresh widget (currently we clear the verifier object but Firebase leaves DOM nodes behind on some error paths, which breaks re-render).
-- Surface a friendlier error when the SDK reports the enterprise / auth-domain problem so you don't have to open DevTools next time.
+- `src/contexts/AuthContext.tsx`
+  - When creating `RecaptchaVerifier`, wait for the container element to actually be in the DOM (`document.getElementById`) before construction; retry once on the next animation frame if missing. Prevents intermittent init failures on slow renders.
+  - After a failed `linkWithPhoneNumber`, always `clear()` and null the verifier so the next attempt gets a fresh widget (already partly done — make it unconditional in `catch`).
+  - Detect and surface these codes distinctly: `auth/error-code:-39`, `auth/captcha-check-failed`, `auth/invalid-app-credential`, `auth/unauthorized-domain`, `auth/quota-exceeded`, `auth/too-many-requests`, `auth/invalid-phone-number`.
 
-### `src/lib/auth-errors.ts`
-- Map two more Firebase codes to translated strings:
-  - `auth/internal-error` when the message contains `"reCAPTCHA Enterprise"` → point the user to Auth Settings.
-  - `auth/unauthorized-domain` → point the user to Authorized domains.
+- `src/lib/auth-errors.ts`
+  - Map the codes above to clear, translated, actionable messages (e.g. `-39` → "Phone verification could not run on this domain. Add the current domain to Firebase Authorized Domains and set reCAPTCHA Enterprise to Audit only.").
+  - Add matching keys to `src/i18n/en.ts`, `am.ts`, `om.ts`.
 
-### `src/i18n/{en,am,om}.ts`
-- Add matching keys: `authRecaptchaEnterprise`, `authUnauthorizedDomain`.
+- `src/pages/VerifyAccount.tsx`
+  - Keep the `<div id="recaptcha-container" />` mounted for the whole page lifecycle (already is). Ensure it is **not** conditionally rendered behind a step guard.
+  - On send-OTP failure, re-render the container (key bump) so Firebase can attach a fresh widget on retry.
+  - Show the new specific error strings via toast + inline helper text.
 
-### `src/pages/VerifyAccount.tsx`
-- Render the reCAPTCHA container **outside** the conditional block so it's always mounted the moment the section is visible. Prevents a race where "Send OTP" is clicked before the container is in the DOM after a state flip.
-- Show the friendlier error text from `auth-errors` verbatim (already wired via toast).
+### 3. Docs update
+- `README.md`: add a "Phone verification — Firebase Console checklist" section documenting the four Console settings above and the meaning of `-39`. Note that Enterprise **Enforce** requires a real registered Web site key covering every domain (preview + prod).
 
-### `.env`
-- Remove the stale `VITE_RECAPTCHA_SITE_KEY` — it is unused (nothing in `src/` references it) and confuses future debugging. If you keep it, it's harmless but misleading.
+### 4. Verify
+- After you apply the Console changes, reload the app, open Register → Verify phone step, click Send OTP. Expected: SMS arrives, no `-39`. If it still fails, the new error mapping will tell us exactly which of the four Console settings is still wrong.
 
-### `README.md` (short section)
-- Add a "Phone verification setup" block documenting the 5 console steps above so this doesn't get re-broken later.
+## Files that will change
+- `src/contexts/AuthContext.tsx` (verifier creation + error handling)
+- `src/lib/auth-errors.ts` (new code mappings)
+- `src/i18n/en.ts`, `src/i18n/am.ts`, `src/i18n/om.ts` (new strings)
+- `src/pages/VerifyAccount.tsx` (container remount on retry, clearer errors)
+- `README.md` (Console checklist)
 
-## Files touched
-- `src/contexts/AuthContext.tsx` — silent recaptcha callbacks, container cleanup on error
-- `src/lib/auth-errors.ts` — map enterprise + unauthorized-domain errors
-- `src/i18n/en.ts`, `am.ts`, `om.ts` — 2 new keys each
-- `src/pages/VerifyAccount.tsx` — always-mounted container, no logic change
-- `.env` — drop unused key
-- `README.md` — 10-line setup note
-
-## Out of scope
-- Migrating to reCAPTCHA Enterprise properly (only relevant if abuse becomes a problem; today the classic v2 SDK-managed flow is enough)
-- Changing from `linkWithPhoneNumber` to any other flow — the current approach is correct for "verify an existing user's phone"
-- Cloud Functions changes — `activateAccount` already correctly requires `authUser.phoneNumber`
+No changes to auth logic, no new dependencies, no backend changes.
