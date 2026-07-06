@@ -1,52 +1,55 @@
-## Diagnosis
+## What your screenshot shows
 
-Your screenshot shows `Firebase: Error (auth/error-code:-39)` right after the console message *"Failed to verify with reCAPTCHA Enterprise. Automatically triggering the reCAPTCHA v2 flow…"*.
+- **Phone auth enforcement: ENFORCE** — Firebase requires a valid reCAPTCHA Enterprise token for every `sendVerificationCode` call.
+- **SMS fraud threshold: Block some (0.5)** — any request scoring ≥ 0.5 is silently dropped.
+- **Configured site keys: only "Ansuarusuna production key"** — that key is almost certainly restricted to your production domain, not the Lovable preview host.
 
-- The "Automatically triggering v2" line is **informational**, not the failure.
-- `auth/error-code:-39` is Firebase's internal reCAPTCHA error meaning **both** the Enterprise path **and** the v2 fallback failed to produce a valid token for this domain. It is almost always a Firebase Console / domain configuration problem, not an app-code bug.
+Result on the preview URL (`id-preview--…lovable.app`):
+1. Enterprise runs with a key that doesn't cover this domain → token invalid / low score.
+2. Fraud filter (0.5) drops the SMS.
+3. SDK falls back to reCAPTCHA v2, which also can't attach on an unregistered domain.
+4. You get `auth/error-code:-39`.
 
-The current lovable preview domain (`*.lovableproject.com` / `id-preview--….lovable.app`) is very likely **not** in Firebase's **Authorized domains** list, and/or the project has **reCAPTCHA Enterprise enforcement = Enforce** without a real Web site key that covers this domain. When that happens Firebase tries Enterprise → fails → falls back to v2 → v2 also can't run on an unauthorized domain → `-39`.
+No app code change can bypass this — it's 100% a Console config problem. Below is the exact fix.
 
-## Plan
+## Plan — Firebase Console changes (do these, in order)
 
-### 1. Firebase Console fixes (required — no code can replace these)
-1. **Authentication → Settings → Authorized domains** — add:
-   - `localhost`
-   - `id-preview--0191d12d-f5fd-4987-84e5-e3995d4c670c.lovable.app`
-   - `0191d12d-f5fd-4987-84e5-e3995d4c670c.lovableproject.com`
-   - your production custom domain (when live)
-2. **Authentication → Settings → reCAPTCHA Enterprise** — set enforcement to **Audit only** (or OFF) until SMS is confirmed working. Only switch back to **Enforce** after you register a real Web reCAPTCHA site key covering all the domains above.
-3. **Authentication → Settings → SMS region policy** — make sure Ethiopia (+251) and any other target countries are **allowed**.
-4. **Authentication → Settings → SMS fraud protection** — keep on **Don't block** while testing.
+### 1. Authorized domains
+Authentication → **Settings → Authorized domains** → Add domain, add each of:
+- `localhost`
+- `id-preview--0191d12d-f5fd-4987-84e5-e3995d4c670c.lovable.app`
+- `0191d12d-f5fd-4987-84e5-e3995d4c670c.lovableproject.com`
+- your published `*.lovable.app` host (after first publish)
+- your custom production domain (when live)
 
-### 2. Code hardening (small, targeted)
-Only changes that improve resilience and error messaging — no behavior change to the verification flow itself:
+### 2. Phone auth enforcement → AUDIT
+Same page → **Phone authentication enforcement mode** → pencil → change **ENFORCE → AUDIT** → Save.
+This lets SMS send while Firebase still scores requests, so you can confirm the flow works before re-tightening.
 
-- `src/contexts/AuthContext.tsx`
-  - When creating `RecaptchaVerifier`, wait for the container element to actually be in the DOM (`document.getElementById`) before construction; retry once on the next animation frame if missing. Prevents intermittent init failures on slow renders.
-  - After a failed `linkWithPhoneNumber`, always `clear()` and null the verifier so the next attempt gets a fresh widget (already partly done — make it unconditional in `catch`).
-  - Detect and surface these codes distinctly: `auth/error-code:-39`, `auth/captcha-check-failed`, `auth/invalid-app-credential`, `auth/unauthorized-domain`, `auth/quota-exceeded`, `auth/too-many-requests`, `auth/invalid-phone-number`.
+### 3. SMS fraud threshold → Don't block
+**SMS fraud risk threshold score** → pencil → move slider all the way left to **Don't block** → Save.
+`Block some (0.5)` will silently drop OTPs on preview/localhost because those domains have no device signal and always score high.
 
-- `src/lib/auth-errors.ts`
-  - Map the codes above to clear, translated, actionable messages (e.g. `-39` → "Phone verification could not run on this domain. Add the current domain to Firebase Authorized Domains and set reCAPTCHA Enterprise to Audit only.").
-  - Add matching keys to `src/i18n/en.ts`, `am.ts`, `om.ts`.
+### 4. Site key coverage (only if you later switch back to ENFORCE)
+**Configured platform site keys → Configure site keys →** open "Ansuarusuna production key" and add every domain from step 1 to its allowed domains list in Google Cloud reCAPTCHA console. If it can't be edited, create a new Web key covering all domains and register it here. Do **not** switch enforcement back to ENFORCE until this is done and tested.
 
-- `src/pages/VerifyAccount.tsx`
-  - Keep the `<div id="recaptcha-container" />` mounted for the whole page lifecycle (already is). Ensure it is **not** conditionally rendered behind a step guard.
-  - On send-OTP failure, re-render the container (key bump) so Firebase can attach a fresh widget on retry.
-  - Show the new specific error strings via toast + inline helper text.
+### 5. SMS region policy
+Authentication → **Settings → SMS regions** → confirm **Ethiopia (+251)** is allowed. Deny-list everything else you don't need to avoid toll fraud.
 
-### 3. Docs update
-- `README.md`: add a "Phone verification — Firebase Console checklist" section documenting the four Console settings above and the meaning of `-39`. Note that Enterprise **Enforce** requires a real registered Web site key covering every domain (preview + prod).
+### 6. Propagation + retry
+Wait ~60s, hard-refresh the app (Cmd/Ctrl-Shift-R), open Register → Verify phone → Send OTP.
+Expected: SMS arrives, no `-39`.
 
-### 4. Verify
-- After you apply the Console changes, reload the app, open Register → Verify phone step, click Send OTP. Expected: SMS arrives, no `-39`. If it still fails, the new error mapping will tell us exactly which of the four Console settings is still wrong.
+## What I will NOT change in code
+
+The app-side hardening (specific `-39` messaging, container remount on retry, verifier cleanup, i18n strings, README checklist) is already in place from the previous turn. There is nothing else code can do — Firebase blocks the request before the SDK can retry.
+
+## Verify
+
+After step 6:
+- **Success** → SMS arrives, code confirms, account activates. Then optionally redo step 4 and flip enforcement back to ENFORCE for production hardening.
+- **Still fails** → the new error mapping will show a specific code (`auth/unauthorized-domain`, `auth/quota-exceeded`, `auth/invalid-phone-number`, etc.) that pinpoints which of the five settings above is still wrong. Send me the new message and I'll narrow it further.
 
 ## Files that will change
-- `src/contexts/AuthContext.tsx` (verifier creation + error handling)
-- `src/lib/auth-errors.ts` (new code mappings)
-- `src/i18n/en.ts`, `src/i18n/am.ts`, `src/i18n/om.ts` (new strings)
-- `src/pages/VerifyAccount.tsx` (container remount on retry, clearer errors)
-- `README.md` (Console checklist)
 
-No changes to auth logic, no new dependencies, no backend changes.
+None. This is a Console-only fix.
