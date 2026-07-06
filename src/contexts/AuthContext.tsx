@@ -95,28 +95,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const waitForContainer = (containerId: string, tries = 10): Promise<HTMLElement> =>
+    new Promise((resolve, reject) => {
+      const attempt = (remaining: number) => {
+        const el = typeof document !== "undefined" ? document.getElementById(containerId) : null;
+        if (el) return resolve(el);
+        if (remaining <= 0) return reject(new Error("RECAPTCHA_CONTAINER_MISSING"));
+        requestAnimationFrame(() => attempt(remaining - 1));
+      };
+      attempt(tries);
+    });
+
   const createPhoneRecaptcha = async (containerId: string) => {
     // Clear any existing verifier first
     clearPhoneRecaptcha();
-    
-    // Small delay to ensure cleanup is complete
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
     // Ensure the container is empty so a fresh widget can render after a prior failure
     const container = typeof document !== "undefined" ? document.getElementById(containerId) : null;
-    if (container) {
-      container.innerHTML = "";
-    }
-    
+    if (container) container.innerHTML = "";
     const verifier = new RecaptchaVerifier(auth, containerId, {
       size: "invisible",
       callback: () => undefined,
       "expired-callback": () => undefined,
     });
-    
     recaptchaVerifierRef.current = verifier;
     return verifier;
   };
+
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {

@@ -88,6 +88,8 @@ const am: TranslationKeys = {
     authGenericError: "አንድ ነገር ተሳስቷል። እባክዎ እንደገና ይሞክሩ።",
     authRecaptchaEnterprise: "የስልክ ማረጋገጫ በ reCAPTCHA Enterprise ታግዷል። Firebase Console → Authentication → Settings → reCAPTCHA Enterprise ውስጥ ማስፈጸምን ያጥፉ።",
     authUnauthorizedDomain: "ይህ ዶሜይን ለ Firebase Auth አልተፈቀደም። Authentication → Settings → Authorized domains ውስጥ ያክሉት።",
+    authRecaptchaMinus39: "የስልክ ማረጋገጫ በዚህ ዶሜይን ላይ አልሮጠም (reCAPTCHA -39)። Firebase Console ውስጥ፡ (1) ዶሜይኑን Authentication → Settings → Authorized domains ላይ ያክሉ፣ (2) reCAPTCHA Enterprise ማስፈጸምን ወደ Audit only (ወይም OFF) ያድርጉ።",
+
     verifyActivate: "መለያ አግብር",
     verifyActivated: "መለያዎ አሁን ንቁ ነው!",
     verifyActivatedNoAdmin: "መለያ ተገብሯል። የሚዛመድ አስተዳዳሪ አልተገኘም።",
