@@ -85,18 +85,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       recaptchaVerifierRef.current = null;
     }
+    // Reset grecaptcha if available to allow clean retry
+    if (typeof window !== "undefined" && (window as any).grecaptcha) {
+      try {
+        (window as any).grecaptcha.reset();
+      } catch {
+        // grecaptcha may not be initialized
+      }
+    }
   };
 
   const createPhoneRecaptcha = async (containerId: string) => {
+    // Clear any existing verifier first
     clearPhoneRecaptcha();
+    
+    // Small delay to ensure cleanup is complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     // Ensure the container is empty so a fresh widget can render after a prior failure
     const container = typeof document !== "undefined" ? document.getElementById(containerId) : null;
-    if (container) container.innerHTML = "";
+    if (container) {
+      container.innerHTML = "";
+    }
+    
     const verifier = new RecaptchaVerifier(auth, containerId, {
       size: "invisible",
       callback: () => undefined,
       "expired-callback": () => undefined,
     });
+    
     recaptchaVerifierRef.current = verifier;
     return verifier;
   };
