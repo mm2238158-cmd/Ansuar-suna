@@ -76,6 +76,7 @@ const am: TranslationKeys = {
     verifyConfirmOtp: "ኮድ አረጋግጥ",
     verifyPhoneConfirmed: "ስልክ በተሳካ ሁኔታ ተረጋግጧል።",
     verifyDomainHint: "በ {host} ላይ ነዎት። በ Firebase Authentication → Settings → Authorized domains ውስጥ ይህን ዶሜይን ያክሉ፣ ወይም http://localhost ይጠቀሙ።",
+    verifyTestingPhoneHint: "ለሙከራ፣ ይህን ስልክ ቁጥር Firebase Authentication → Sign-in method → Phone → Phone numbers for testing ውስጥ ከቋሚ ኮድ ጋር ያክሉ። ይህ በpreview ዶሜይኖች ላይ የreal SMS እገዳን ያስወግዳል።",
     authCaptchaFailed: "የስልክ ማረጋገጫ ታግዷል፡ ይህ ጣቢያ አልተፈቀደም። http://localhost ይጠቀሙ ወይም ዶሜይንዎን በ Firebase Authorized domains ውስጥ ያክሉ።",
     authInvalidPhone: "እባክዎ ትክክለኛ ስልክ ቁጥር ያስገቡ (ለምሳሌ +2519XXXXXXXX)።",
     authTooManyRequests: "ብዙ ሙከራዎች። እባክዎ ጥቂት ደቂቃ ይጠብቁና እንደገና ይሞክሩ።",
@@ -88,7 +89,9 @@ const am: TranslationKeys = {
     authGenericError: "አንድ ነገር ተሳስቷል። እባክዎ እንደገና ይሞክሩ።",
     authRecaptchaEnterprise: "የስልክ ማረጋገጫ በ reCAPTCHA Enterprise ታግዷል። Firebase Console → Authentication → Settings → reCAPTCHA Enterprise ውስጥ ማስፈጸምን ያጥፉ።",
     authUnauthorizedDomain: "ይህ ዶሜይን ለ Firebase Auth አልተፈቀደም። Authentication → Settings → Authorized domains ውስጥ ያክሉት።",
-    authRecaptchaMinus39: "የስልክ ማረጋገጫ በዚህ ዶሜይን ላይ አልሮጠም (reCAPTCHA -39)። Firebase Console ውስጥ፡ (1) ዶሜይኑን Authentication → Settings → Authorized domains ላይ ያክሉ፣ (2) reCAPTCHA Enterprise ማስፈጸምን ወደ Audit only (ወይም OFF) ያድርጉ።",
+    authInvalidAppCredential: "Firebase የስልክ verifier ውድቅ አድርጎታል። ይህ ትክክለኛ ዶሜይን በ Authorized domains ውስጥ እንዳለ እና reCAPTCHA Web site key ይህን ዶሜይን እንደሚሸፍን ያረጋግጡ።",
+    authSmsRestricted: "Firebase በአሁኑ ጊዜ ለዚህ project/number real SMS እየከለከለ ነው (error 39)። ለሙከራ ይህን ስልክ እንደ Firebase test phone number ከቋሚ ኮድ ጋር ያክሉ፤ ለreal SMS billing፣ SMS region policy፣ quota ያረጋግጡ፣ ከቀጠለም Firebase support ያግኙ።",
+    authRecaptchaMinus39: "Firebase በአሁኑ ጊዜ ለዚህ project/number real SMS እየከለከለ ነው (error 39)። ለሙከራ ይህን ስልክ እንደ Firebase test phone number ከቋሚ ኮድ ጋር ያክሉ፤ ለreal SMS billing፣ SMS region policy፣ quota ያረጋግጡ፣ ከቀጠለም Firebase support ያግኙ።",
 
     verifyActivate: "መለያ አግብር",
     verifyActivated: "መለያዎ አሁን ንቁ ነው!",
