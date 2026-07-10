@@ -70,7 +70,8 @@ service cloud.firestore {
         && request.resource.data.emailVerified == false
         && request.resource.data.phoneVerified == false;
 
-      allow read: if canReadUser(userId);
+      allow read: if canReadUser(userId)
+        || (signedIn() && resource.data.role == "admin" && resource.data.isActive == true);
 
       allow update: if (
           // Owner self-edit (profile fields only)
@@ -137,6 +138,8 @@ service cloud.firestore {
         || (signedIn() && (
           resource.data.adminId == request.auth.uid
           || resource.data.memberId == request.auth.uid
+          // Allow members to read all assignments for admin load calculation during self-activation
+          || currentUserRole() == "member"
         ));
 
       allow create: if isSuperAdmin()
