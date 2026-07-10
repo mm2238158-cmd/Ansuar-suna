@@ -74,6 +74,7 @@ const en = {
     verifyConfirmOtp: "Confirm code",
     verifyPhoneConfirmed: "Phone verified successfully.",
     verifyDomainHint: "You are on {host}. Add this domain in Firebase Authentication → Settings → Authorized domains, or use http://localhost instead.",
+    verifyTestingPhoneHint: "For testing, add this phone number under Firebase Authentication → Sign-in method → Phone → Phone numbers for testing, then use its fixed code. This avoids real SMS blocks on preview domains.",
     authCaptchaFailed: "Phone verification blocked: this site is not authorized. Use http://localhost or add your domain in Firebase Authorized domains.",
     authInvalidPhone: "Please enter a valid phone number (e.g. +2519XXXXXXXX).",
     authTooManyRequests: "Too many attempts. Please wait a few minutes and try again.",
@@ -86,7 +87,9 @@ const en = {
     authGenericError: "Something went wrong. Please try again.",
     authRecaptchaEnterprise: "Phone verification is blocked by reCAPTCHA Enterprise. In Firebase Console → Authentication → Settings → reCAPTCHA Enterprise, switch enforcement OFF (or Audit only).",
     authUnauthorizedDomain: "This domain is not authorized for Firebase Auth. Add it under Authentication → Settings → Authorized domains.",
-    authRecaptchaMinus39: "Phone verification could not run on this domain (reCAPTCHA error -39). In Firebase Console: (1) add this domain to Authentication → Settings → Authorized domains, (2) set reCAPTCHA Enterprise enforcement to Audit only (or OFF) until a real Web site key covering this domain is registered.",
+    authInvalidAppCredential: "Firebase rejected the phone verifier. Check that this exact domain is in Authorized domains and that the reCAPTCHA Web site key covers this domain.",
+    authSmsRestricted: "Firebase is blocking real SMS for this project/number right now (error 39). For testing, add this phone as a Firebase test phone number with a fixed code; for real SMS, verify billing, SMS region policy, quota, and contact Firebase support if it continues.",
+    authRecaptchaMinus39: "Firebase is blocking real SMS for this project/number right now (error 39). For testing, add this phone as a Firebase test phone number with a fixed code; for real SMS, verify billing, SMS region policy, quota, and contact Firebase support if it continues.",
 
     verifyActivate: "Activate account",
     verifyActivated: "Your account is now active!",

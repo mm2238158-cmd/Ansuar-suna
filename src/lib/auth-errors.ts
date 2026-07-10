@@ -6,9 +6,13 @@ type AuthMessages = TranslationKeys["auth"];
 export const getAuthErrorMessage = (err: unknown, messages: AuthMessages): string => {
   if (err instanceof FirebaseError) {
     const msg = err.message || "";
-    // Firebase internal reCAPTCHA failure (both Enterprise + v2 fallback failed)
-    if (/error-code:\s*-39/i.test(msg) || /error-code:-39/i.test(msg)) {
-      return messages.authRecaptchaMinus39;
+    // Firebase phone auth backend restriction/quota/region failure. The SDK may expose
+    // this as auth/error-code:-39 while the network response says "Error code: 39".
+    if (/error[- ]code:\s*-?39/i.test(msg)) {
+      return messages.authSmsRestricted;
+    }
+    if (/invalid[_ -]app[_ -]credential/i.test(msg)) {
+      return messages.authInvalidAppCredential;
     }
     if (/reCAPTCHA Enterprise/i.test(msg)) {
       return messages.authRecaptchaEnterprise;
@@ -19,7 +23,7 @@ export const getAuthErrorMessage = (err: unknown, messages: AuthMessages): strin
       case "auth/unauthorized-domain":
         return messages.authUnauthorizedDomain;
       case "auth/invalid-app-credential":
-        return messages.authRecaptchaMinus39;
+        return messages.authInvalidAppCredential;
       case "auth/internal-error":
         return messages.authRecaptchaEnterprise;
       case "auth/quota-exceeded":

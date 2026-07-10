@@ -76,6 +76,7 @@ const om: TranslationKeys = {
     verifyConfirmOtp: "Koodii mirkaneessi",
     verifyPhoneConfirmed: "Bilbilli milkaa'inaan mirkanaa'e.",
     verifyDomainHint: "Bara {host} irratti jirta. Firebase Authentication → Settings → Authorized domains keessatti dameenii kana dabalaa, yookiin http://localhost fayyadamaa.",
+    verifyTestingPhoneHint: "Qormaataaf, lakkoofsa bilbilaa kana Firebase Authentication → Sign-in method → Phone → Phone numbers for testing keessatti koodii dhaabbataa waliin dabali. Kun preview domains irratti gufuu real SMS hambisa.",
     authCaptchaFailed: "Mirkaneessiin bilbilaa cufame: marsariitii kun hayyamame hin jiru. http://localhost fayyadamaa yookiin dameenii kee Firebase Authorized domains keessatti dabalaa.",
     authInvalidPhone: "Maaloo lakkoofsa bilbilaa sirrii galchi (fkn. +2519XXXXXXXX).",
     authTooManyRequests: "Yaalii baay'ee. Maaloo daqiiqaa muraasa eegiitii irra deebi'i yaali.",
@@ -88,7 +89,9 @@ const om: TranslationKeys = {
     authGenericError: "Wanti tokko dogoggora. Irra deebi'i yaali.",
     authRecaptchaEnterprise: "Mirkaneessiin bilbilaa reCAPTCHA Enterprise'n cufame. Firebase Console → Authentication → Settings → reCAPTCHA Enterprise keessatti dhiibbaa dhaamsi (yookiin Audit only godhi).",
     authUnauthorizedDomain: "Dameen kun Firebase Auth'f hayyamame hin jiru. Authentication → Settings → Authorized domains keessatti dabaluu qabda.",
-    authRecaptchaMinus39: "Mirkaneessi bilbilaa dameen kana irratti hin hojjanne (reCAPTCHA -39). Firebase Console keessatti: (1) damee kana Authentication → Settings → Authorized domains irratti dabali, (2) reCAPTCHA Enterprise dhiibbaa Audit only (yookiin OFF) godhi.",
+    authInvalidAppCredential: "Firebase verifier bilbilaa dideera. Domeeniin kun sirriitti Authorized domains keessatti akka jiruufi reCAPTCHA Web site key domeenii kana akka hammatu mirkaneessi.",
+    authSmsRestricted: "Firebase amma project/number kanaaf real SMS ugguraa jira (error 39). Qormaataaf, bilbila kana Firebase test phone number godhii koodii dhaabbataa waliin dabali; real SMS'f billing, SMS region policy, quota mirkaneessi; yoo itti fufe Firebase support qunnami.",
+    authRecaptchaMinus39: "Firebase amma project/number kanaaf real SMS ugguraa jira (error 39). Qormaataaf, bilbila kana Firebase test phone number godhii koodii dhaabbataa waliin dabali; real SMS'f billing, SMS region policy, quota mirkaneessi; yoo itti fufe Firebase support qunnami.",
 
     verifyActivate: "Akkaawuntii hojjachiisi",
     verifyActivated: "Akkaawuntiin kee amma hojii irra jira!",

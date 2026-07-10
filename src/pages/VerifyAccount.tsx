@@ -206,9 +206,14 @@ const VerifyAccount = () => {
             </div>
             <p className="text-xs text-muted-foreground">{t.auth.verifyPhoneHelp}</p>
             {showDomainHint && (
-              <p className="text-xs text-warning bg-warning/10 border border-warning/30 rounded-md p-2">
-                {t.auth.verifyDomainHint.replace("{host}", hostname)}
-              </p>
+              <div className="space-y-2">
+                <p className="text-xs text-warning bg-warning/10 border border-warning/30 rounded-md p-2">
+                  {t.auth.verifyDomainHint.replace("{host}", hostname)}
+                </p>
+                <p className="text-xs text-muted-foreground bg-muted/50 border rounded-md p-2">
+                  {t.auth.verifyTestingPhoneHint}
+                </p>
+              </div>
             )}
             <Input
               value={phone}
