@@ -153,7 +153,14 @@ service cloud.firestore {
           && request.resource.data.assignedAt is timestamp
         );
 
-      allow update, delete: if isSuperAdmin();
+      allow update: if isSuperAdmin();
+
+      allow delete: if isSuperAdmin()
+        || (
+          // Allow users to delete their own assignments during activation
+          signedIn()
+          && resource.data.memberId == request.auth.uid
+        );
     }
 
     match /payments/{paymentId} {
