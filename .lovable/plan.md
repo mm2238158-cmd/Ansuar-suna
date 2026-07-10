@@ -1,46 +1,63 @@
-## Diagnosis
+## Problem
 
-The latest network evidence shows two separate Firebase server responses:
+Clicking **Activate account** calls the `activateAccount` Cloud Function via `httpsCallable`. It returns `internal`, which means either:
 
-1. `400 INVALID_APP_CREDENTIAL` on the Enterprise token request.
-2. `503 Error code: 39` on the fallback request.
+1. The Cloud Function isn't deployed to your Firebase project (very likely — there's no evidence `firebase deploy --only functions` has ever been run against `ansuarusunacharityms`), or
+2. It is deployed but crashes at runtime (e.g. Firestore permission on `assignments`, cold-start error, region mismatch).
 
-That means the app is reaching Firebase correctly, but Firebase is rejecting/restricting the phone verification request server-side. Since you already completed the Console domain/enforcement steps, the next safest path is to stop depending on real SMS while testing and add better in-app diagnostics for the remaining cases.
+Either way, the current architecture **hard-blocks account activation on a Cloud Function** you may never be able to deploy from Lovable (Cloud Functions require the Blaze plan + a local `firebase deploy`). Your Firestore rules also explicitly forbid the `pending → active` transition from any client, so there is no fallback path today. That's the root cause of "once and for all" pain here.
 
-## Plan
+## Fix — remove the Cloud Function dependency for activation
 
-### 1. Use Firebase test phone numbers for registration testing
-- In Firebase Console → Authentication → Sign-in method → Phone → **Phone numbers for testing**.
-- Add your test number, for example `+251715026866`, with a fixed code like `123456`.
-- This bypasses real SMS delivery, toll-fraud scoring, carrier restrictions, and quota restrictions.
-- You can finish testing account registration immediately without waiting for Firebase/Google SMS approval.
+Do activation **entirely client-side**, using Firebase Auth's own verified state as the source of truth (Firestore rules can read `request.auth.token.email_verified` and `request.auth.token.phone_number`). Admin assignment stays a Super Admin responsibility (done later from the admin UI), so members are never blocked on a backend deploy.
 
-### 2. Update app error handling for the real observed responses
-- Treat `INVALID_APP_CREDENTIAL` as a domain/site-key mismatch message.
-- Treat `503 Error code: 39` as a Firebase SMS restriction/quota/region/backend restriction message, not only a reCAPTCHA setup issue.
-- Show the user a clear next action: use a Firebase test phone number now, or contact Firebase support / verify billing + SMS region policy for real numbers.
+### 1. `firestore.rules` — allow owner self-activation
 
-### 3. Add a visible testing hint on the phone verification step
-- If the app is running on Lovable preview/project domains, show a short note explaining that real SMS may be blocked by Firebase and test phone numbers are recommended during development.
-- Keep this small and only near the OTP button.
+Add a third branch to the `users/{userId}` `allow update` rule:
 
-### 4. Keep the existing reCAPTCHA cleanup/remount logic
-- The current verifier cleanup and fresh container retry logic should stay.
-- No need to rewrite the auth flow; the failure is not coming from React state or the form.
-
-### 5. Verify
-- Typecheck the frontend.
-- Confirm the new messages compile in English, Amharic, and Oromo translation files.
-
-## Technical details
-
-Observed request:
-
-```text
-POST accounts:sendVerificationCode
-Origin: https://0191d12d-f5fd-4987-84e5-e3995d4c670c.lovableproject.com
-Response 1: 400 INVALID_APP_CREDENTIAL
-Response 2: 503 Error code: 39
+```
+// Owner self-activation after verifying email + phone
+|| (
+  isOwnUser(userId)
+  && resource.data.status == "pending"
+  && request.resource.data.status == "active"
+  && request.resource.data.isActive == true
+  && request.auth.token.email_verified == true
+  && request.auth.token.phone_number is string
+  && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+       "status", "isActive", "emailVerified", "phoneVerified", "activatedAt"
+     ])
+)
 ```
 
-This confirms the remaining issue is Firebase Auth phone-verification infrastructure/configuration for real SMS, not a broken button or missing reCAPTCHA container.
+Also remove the `!(pending → active)` block from the super-admin branch (no longer needed; owner path handles it and super admin can still edit everything else). Keep every other rule untouched.
+
+### 2. `src/contexts/AuthContext.tsx` — replace callable with direct Firestore write
+
+Rewrite `activateAccount()`:
+
+- `reloadFirebaseUser()` first.
+- Guard: `auth.currentUser.emailVerified` and `auth.currentUser.phoneNumber` must both be truthy — otherwise throw a clear i18n error.
+- `updateDoc(doc(db, "users", uid), { status: "active", isActive: true, emailVerified: true, phoneVerified: true, activatedAt: serverTimestamp() })`.
+- Return `{ success: true, noAdminAvailable: true }` (assignment happens later via Super Admin) so the existing UI shows the "activated, awaiting admin" toast.
+- Drop the `httpsCallable` import and the `functions` usage from this file.
+
+### 3. `src/pages/VerifyAccount.tsx` — clearer error
+
+Swap `getCallableErrorMessage` for `getAuthErrorMessage` in the activate handler so Firestore permission / verification errors surface with real messages instead of the opaque "Internal".
+
+### 4. Leave `functions/src/index.ts` alone
+
+The Cloud Function stays in the repo for future auto-assignment work, but the app no longer depends on it being deployed.
+
+### 5. Verify
+
+- `tsgo` typecheck.
+- Manually walk the flow in preview: verify email → verify phone (test number) → Activate account → should land on `/` with a success toast, no "internal" error.
+- Confirm Firestore rules compile (via `firebase deploy --only firestore:rules` when you're ready, or the rules simulator).
+
+## Why this ends the loop
+
+- No Cloud Function deploy needed for signup to work.
+- Rules cryptographically require `email_verified` + `phone_number` in the ID token, so the security posture is equivalent to what the function was enforcing.
+- Admin assignment is decoupled — Super Admin assigns from the existing admin panel; missing assignment no longer blocks the member from finishing sign-up.
