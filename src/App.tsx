@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import AppLayout from "@/components/layout/AppLayout";
 import { useEnsureCurrentMonth } from "@/hooks/useEnsureCurrentMonth";
+import { Analytics } from "@vercel/analytics/react";
 
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -162,6 +163,7 @@ const App = () => (
           <BrowserRouter>
             <AppRoutes />
           </BrowserRouter>
+          <Analytics />
         </TooltipProvider>
       </AuthProvider>
     </LanguageProvider>
