@@ -13,9 +13,8 @@ import {
   type User,
   type ConfirmationResult,
 } from "firebase/auth";
-import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
-import { auth, db, googleProvider, functions } from "@/lib/firebase";
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp } from "firebase/firestore";
+import { auth, db, googleProvider } from "@/lib/firebase";
 import { isValidE164, normalizePhone, RECAPTCHA_CONTAINER_ID } from "@/lib/phone-utils";
 import type { AppUser, Gender } from "@/lib/types";
 
