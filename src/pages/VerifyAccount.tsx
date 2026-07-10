@@ -7,11 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import logo from "@/assets/logo.png";
-import { CheckCircle2, Mail, Phone, LogOut } from "lucide-react";
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import { CheckCircle2, Mail, LogOut } from "lucide-react";
 import { auth } from "@/lib/firebase";
 import { getAuthErrorMessage } from "@/lib/auth-errors";
-import { RECAPTCHA_CONTAINER_ID } from "@/lib/phone-utils";
 
 const VerifyAccount = () => {
   const {
@@ -20,9 +18,6 @@ const VerifyAccount = () => {
     logout,
     reloadFirebaseUser,
     resendEmailVerification,
-    clearPhoneRecaptcha,
-    sendPhoneOtp,
-    confirmPhoneOtp,
     activateAccount,
     refreshUser,
   } = useAuth();
@@ -31,37 +26,23 @@ const VerifyAccount = () => {
   const navigate = useNavigate();
 
   const [emailVerified, setEmailVerified] = useState(false);
-  const [phoneLinked, setPhoneLinked] = useState(false);
-  const [phone, setPhone] = useState(appUser?.phone || "");
-  const [otpSent, setOtpSent] = useState(false);
-  const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
-  const [recaptchaKey, setRecaptchaKey] = useState(0);
 
 
   const hostname = typeof window !== "undefined" ? window.location.hostname : "";
   const showDomainHint = hostname !== "localhost" && hostname !== "127.0.0.1";
 
-  useEffect(() => {
-    setPhone(appUser?.phone || "");
-  }, [appUser?.phone]);
-
-  useEffect(() => {
-    return () => clearPhoneRecaptcha();
-  }, [clearPhoneRecaptcha]);
 
   const syncVerificationState = async () => {
     await reloadFirebaseUser();
     const user = auth.currentUser;
     if (!user) return;
     setEmailVerified(user.emailVerified);
-    setPhoneLinked(!!user.phoneNumber);
   };
 
   useEffect(() => {
     if (firebaseUser) {
       setEmailVerified(firebaseUser.emailVerified);
-      setPhoneLinked(!!firebaseUser.phoneNumber);
     }
   }, [firebaseUser]);
 
@@ -102,49 +83,6 @@ const VerifyAccount = () => {
     }
   };
 
-  const handleSendOtp = async () => {
-    if (!phone.trim()) {
-      toast({ title: "Error", description: t.auth.verifyPhoneRequired, variant: "destructive" });
-      return;
-    }
-    setLoading(true);
-    setOtp("");
-    try {
-      await sendPhoneOtp(phone, RECAPTCHA_CONTAINER_ID);
-      setOtpSent(true);
-      toast({ title: t.auth.verifyOtpSent });
-    } catch (err: unknown) {
-      setOtpSent(false);
-      clearPhoneRecaptcha();
-      setRecaptchaKey((k) => k + 1);
-      toast({
-
-        title: "Error",
-        description: getAuthErrorMessage(err, t.auth),
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleConfirmOtp = async () => {
-    if (otp.length < 6) return;
-    setLoading(true);
-    try {
-      await confirmPhoneOtp(otp);
-      setPhoneLinked(true);
-      toast({ title: t.auth.verifyPhoneConfirmed });
-    } catch (err: unknown) {
-      toast({
-        title: "Error",
-        description: getAuthErrorMessage(err, t.auth),
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleActivate = async () => {
     setLoading(true);
@@ -169,7 +107,7 @@ const VerifyAccount = () => {
     }
   };
 
-  const canActivate = emailVerified && phoneLinked;
+  const canActivate = emailVerified;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -197,64 +135,6 @@ const VerifyAccount = () => {
             </div>
           </div>
 
-          <div className="rounded-lg border p-4 space-y-3">
-            <div className="flex items-center gap-2 font-medium">
-              <Phone className="h-4 w-4 text-primary" />
-              {t.auth.verifyPhoneStep}
-              {phoneLinked && <CheckCircle2 className="h-4 w-4 text-success ml-auto" />}
-            </div>
-            <p className="text-xs text-muted-foreground">{t.auth.verifyPhoneHelp}</p>
-            {showDomainHint && (
-              <div className="space-y-2">
-                <p className="text-xs text-warning bg-warning/10 border border-warning/30 rounded-md p-2">
-                  {t.auth.verifyDomainHint.replace("{host}", hostname)}
-                </p>
-                <p className="text-xs text-muted-foreground bg-muted/50 border rounded-md p-2">
-                  {t.auth.verifyTestingPhoneHint}
-                </p>
-              </div>
-            )}
-            <Input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+251..."
-              disabled={phoneLinked || otpSent}
-            />
-            {!phoneLinked && (
-              <>
-                <Button
-                  type="button"
-                  className="w-full"
-                  onClick={handleSendOtp}
-                  disabled={loading}
-                >
-                  {otpSent ? t.auth.verifyResendOtp : t.auth.verifySendOtp}
-                </Button>
-                {otpSent && (
-                  <div className="space-y-3">
-                    <InputOTP maxLength={6} value={otp} onChange={setOtp}>
-                      <InputOTPGroup className="justify-center">
-                        {[0, 1, 2, 3, 4, 5].map((i) => (
-                          <InputOTPSlot key={i} index={i} />
-                        ))}
-                      </InputOTPGroup>
-                    </InputOTP>
-                    <Button
-                      type="button"
-                      className="w-full"
-                      onClick={handleConfirmOtp}
-                      disabled={loading || otp.length < 6}
-                    >
-                      {t.auth.verifyConfirmOtp}
-                    </Button>
-                  </div>
-                )}
-              </>
-            )}
-            {/* reCAPTCHA container must stay mounted before Send OTP is clicked */}
-            {/* reCAPTCHA container must stay mounted before Send OTP is clicked; key bump forces a fresh DOM node on retry */}
-            <div key={recaptchaKey} id={RECAPTCHA_CONTAINER_ID} />
-          </div>
 
 
           <Button type="button" className="w-full" onClick={handleActivate} disabled={!canActivate || loading}>

@@ -9,5 +9,3 @@ export const normalizePhone = (phone: string): string => {
 /** Basic E.164 validation (8–15 digits after country code). */
 export const isValidE164 = (phone: string): boolean =>
   /^\+[1-9]\d{7,14}$/.test(phone);
-
-export const RECAPTCHA_CONTAINER_ID = "recaptcha-container";

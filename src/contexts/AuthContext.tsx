@@ -8,14 +8,11 @@ import {
   sendPasswordResetEmail,
   updatePassword,
   sendEmailVerification,
-  linkWithPhoneNumber,
-  RecaptchaVerifier,
   type User,
-  type ConfirmationResult,
 } from "firebase/auth";
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp, collection, getDocs, query, where, deleteDoc } from "firebase/firestore";
 import { auth, db, googleProvider } from "@/lib/firebase";
-import { isValidE164, normalizePhone, RECAPTCHA_CONTAINER_ID } from "@/lib/phone-utils";
+import { isValidE164, normalizePhone } from "@/lib/phone-utils";
 import { getEligibleAdmins, pickLeastLoadedAdmin, type AdminUser } from "@/lib/assignment";
 import type { AppUser, Gender } from "@/lib/types";
 
@@ -39,9 +36,6 @@ interface AuthContextType {
   refreshUser: () => Promise<void>;
   reloadFirebaseUser: () => Promise<void>;
   resendEmailVerification: () => Promise<void>;
-  clearPhoneRecaptcha: () => void;
-  sendPhoneOtp: (phoneNumber: string, recaptchaContainerId?: string) => Promise<void>;
-  confirmPhoneOtp: (code: string) => Promise<void>;
   activateAccount: () => Promise<ActivateAccountResult>;
 }
 
@@ -51,8 +45,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
-  const phoneConfirmationRef = useRef<ConfirmationResult | null>(null);
 
   const fetchAppUser = async (uid: string): Promise<AppUser | null> => {
     const snap = await getDoc(doc(db, "users", uid));
@@ -76,50 +68,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const clearPhoneRecaptcha = () => {
-    if (recaptchaVerifierRef.current) {
-      try {
-        recaptchaVerifierRef.current.clear();
-      } catch {
-        // Widget may already be cleared
-      }
-      recaptchaVerifierRef.current = null;
-    }
-    // Reset grecaptcha if available to allow clean retry
-    if (typeof window !== "undefined" && (window as any).grecaptcha) {
-      try {
-        (window as any).grecaptcha.reset();
-      } catch {
-        // grecaptcha may not be initialized
-      }
-    }
-  };
-
-  const waitForContainer = (containerId: string, tries = 10): Promise<HTMLElement> =>
-    new Promise((resolve, reject) => {
-      const attempt = (remaining: number) => {
-        const el = typeof document !== "undefined" ? document.getElementById(containerId) : null;
-        if (el) return resolve(el);
-        if (remaining <= 0) return reject(new Error("RECAPTCHA_CONTAINER_MISSING"));
-        requestAnimationFrame(() => attempt(remaining - 1));
-      };
-      attempt(tries);
-    });
-
-  const createPhoneRecaptcha = async (containerId: string) => {
-    // Clear any existing verifier first
-    clearPhoneRecaptcha();
-    // Ensure the container is empty so a fresh widget can render after a prior failure
-    const container = typeof document !== "undefined" ? document.getElementById(containerId) : null;
-    if (container) container.innerHTML = "";
-    const verifier = new RecaptchaVerifier(auth, containerId, {
-      size: "invisible",
-      callback: () => undefined,
-      "expired-callback": () => undefined,
-    });
-    recaptchaVerifierRef.current = verifier;
-    return verifier;
-  };
 
 
   useEffect(() => {
@@ -165,46 +113,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await sendEmailVerification(auth.currentUser);
   };
 
-  const sendPhoneOtp = async (
-    phoneNumber: string,
-    recaptchaContainerId: string = RECAPTCHA_CONTAINER_ID
-  ) => {
-    if (!auth.currentUser) throw new Error("NOT_SIGNED_IN");
-
-    const normalized = normalizePhone(phoneNumber);
-    if (!isValidE164(normalized)) {
-      throw new Error("INVALID_PHONE");
-    }
-
-    try {
-      const verifier = await createPhoneRecaptcha(recaptchaContainerId);
-      phoneConfirmationRef.current = await linkWithPhoneNumber(
-        auth.currentUser,
-        normalized,
-        verifier
-      );
-    } catch (err) {
-      clearPhoneRecaptcha();
-      throw err;
-    }
-  };
-
-  const confirmPhoneOtp = async (code: string) => {
-    if (!phoneConfirmationRef.current) throw new Error("OTP_NOT_SENT");
-    await phoneConfirmationRef.current.confirm(code);
-    phoneConfirmationRef.current = null;
-    clearPhoneRecaptcha();
-    await reloadFirebaseUser();
-  };
 
   const activateAccount = async (): Promise<ActivateAccountResult> => {
     await reloadFirebaseUser();
     const user = auth.currentUser;
     if (!user) throw new Error("NOT_SIGNED_IN");
     if (!user.emailVerified) throw new Error("EMAIL_NOT_VERIFIED");
-    if (!user.phoneNumber) throw new Error("PHONE_NOT_VERIFIED");
 
-    // Force-refresh the ID token so Firestore rules see email_verified + phone_number claims
+    // Force-refresh the ID token so Firestore rules see email_verified claim
     await user.getIdToken(true);
 
     const userRef = doc(db, "users", user.uid);
@@ -260,7 +176,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status: "active",
       isActive: true,
       emailVerified: true,
-      phoneVerified: true,
       activatedAt: serverTimestamp(),
     };
 
@@ -297,8 +212,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = async () => {
-    clearPhoneRecaptcha();
-    phoneConfirmationRef.current = null;
     await signOut(auth);
     setAppUser(null);
   };
@@ -328,9 +241,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         refreshUser,
         reloadFirebaseUser,
         resendEmailVerification,
-        clearPhoneRecaptcha,
-        sendPhoneOtp,
-        confirmPhoneOtp,
         activateAccount,
       }}
     >

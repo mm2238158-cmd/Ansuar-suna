@@ -88,15 +88,14 @@ service cloud.firestore {
           && request.resource.data.status == resource.data.status
           && request.resource.data.isActive == resource.data.isActive
         ) || (
-          // Owner self-activation after verifying email + phone (with admin assignment)
+          // Owner self-activation after verifying email (with admin assignment)
           isOwnUser(userId)
           && resource.data.status == "pending"
           && request.resource.data.status == "active"
           && request.resource.data.isActive == true
           && request.auth.token.email_verified == true
-          && request.auth.token.phone_number is string
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            "status", "isActive", "emailVerified", "phoneVerified", "activatedAt", "assignedAdminId"
+            "status", "isActive", "emailVerified", "activatedAt", "assignedAdminId"
           ])
           && (!request.resource.data.keys().hasAny(["assignedAdminId"]) || request.resource.data.assignedAdminId is string)
         ) || (
