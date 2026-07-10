@@ -176,6 +176,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status: "active",
       isActive: true,
       emailVerified: true,
+      phoneVerified: false,
       activatedAt: serverTimestamp(),
     };
 

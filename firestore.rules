@@ -96,7 +96,7 @@ service cloud.firestore {
           && request.resource.data.isActive == true
           && request.auth.token.email_verified == true
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            "status", "isActive", "emailVerified", "activatedAt", "assignedAdminId"
+            "status", "isActive", "emailVerified", "activatedAt", "assignedAdminId", "phoneVerified"
           ])
           && (!request.resource.data.keys().hasAny(["assignedAdminId"]) || request.resource.data.assignedAdminId is string)
         ) || (
