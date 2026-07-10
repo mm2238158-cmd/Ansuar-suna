@@ -10,7 +10,6 @@ import logo from "@/assets/logo.png";
 import { CheckCircle2, Mail, Phone, LogOut } from "lucide-react";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { auth } from "@/lib/firebase";
-import { getCallableErrorMessage } from "@/lib/callable-errors";
 import { getAuthErrorMessage } from "@/lib/auth-errors";
 import { RECAPTCHA_CONTAINER_ID } from "@/lib/phone-utils";
 
