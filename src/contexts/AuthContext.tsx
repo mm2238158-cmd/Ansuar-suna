@@ -197,12 +197,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const activateAccount = async (): Promise<ActivateAccountResult> => {
-    const callable = httpsCallable<void, ActivateAccountResult>(functions, "activateAccount");
-    const result = await callable();
+    await reloadFirebaseUser();
+    const user = auth.currentUser;
+    if (!user) throw new Error("NOT_SIGNED_IN");
+    if (!user.emailVerified) throw new Error("EMAIL_NOT_VERIFIED");
+    if (!user.phoneNumber) throw new Error("PHONE_NOT_VERIFIED");
+    // Force-refresh the ID token so Firestore rules see email_verified + phone_number claims
+    await user.getIdToken(true);
+    await updateDoc(doc(db, "users", user.uid), {
+      status: "active",
+      isActive: true,
+      emailVerified: true,
+      phoneVerified: true,
+      activatedAt: serverTimestamp(),
+    });
     await reloadFirebaseUser();
     await refreshUser();
-    return result.data;
+    return { success: true, noAdminAvailable: true };
   };
+
 
   const loginWithGoogle = async () => {
     const cred = await signInWithPopup(auth, googleProvider);
