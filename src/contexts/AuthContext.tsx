@@ -13,9 +13,10 @@ import {
   type User,
   type ConfirmationResult,
 } from "firebase/auth";
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp, collection, getDocs, query, where, deleteDoc } from "firebase/firestore";
 import { auth, db, googleProvider } from "@/lib/firebase";
 import { isValidE164, normalizePhone, RECAPTCHA_CONTAINER_ID } from "@/lib/phone-utils";
+import { getEligibleAdmins, pickLeastLoadedAdmin, type AdminUser } from "@/lib/assignment";
 import type { AppUser, Gender } from "@/lib/types";
 
 interface ActivateAccountResult {
@@ -202,18 +203,87 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) throw new Error("NOT_SIGNED_IN");
     if (!user.emailVerified) throw new Error("EMAIL_NOT_VERIFIED");
     if (!user.phoneNumber) throw new Error("PHONE_NOT_VERIFIED");
+
     // Force-refresh the ID token so Firestore rules see email_verified + phone_number claims
     await user.getIdToken(true);
-    await updateDoc(doc(db, "users", user.uid), {
+
+    const userRef = doc(db, "users", user.uid);
+    const userSnap = await getDoc(userRef);
+
+    if (!userSnap.exists()) {
+      throw new Error("USER_PROFILE_NOT_FOUND");
+    }
+
+    const userData = userSnap.data() as AppUser;
+
+    if (userData.role !== "member") {
+      throw new Error("ONLY_MEMBERS_CAN_ACTIVATE");
+    }
+
+    if (userData.status === "active" && userData.isActive === true) {
+      return { success: true, alreadyActive: true, assignedAdminId: userData.assignedAdminId ?? null };
+    }
+
+    if (userData.status !== "pending") {
+      throw new Error("ACCOUNT_NOT_ELIGIBLE_FOR_ACTIVATION");
+    }
+
+    // Fetch eligible admins
+    const adminsSnap = await getDocs(query(collection(db, "users"), where("role", "==", "admin")));
+    const admins: AdminUser[] = adminsSnap.docs.map((d) => ({
+      id: d.id,
+      name: (d.data().name as string) || "",
+      gender: d.data().gender as "male" | "female" | undefined,
+      isActive: d.data().isActive as boolean | undefined,
+      role: d.data().role as string,
+    }));
+
+    // Fetch current assignment counts
+    const assignmentsSnap = await getDocs(collection(db, "assignments"));
+    const counts: Record<string, number> = {};
+    assignmentsSnap.docs.forEach((d) => {
+      const adminId = d.data().adminId as string;
+      counts[adminId] = (counts[adminId] ?? 0) + 1;
+    });
+
+    // Pick best admin
+    const eligible = getEligibleAdmins(admins, userData.gender as "male" | "female" | undefined);
+    const bestAdmin = pickLeastLoadedAdmin(eligible, counts);
+
+    // Clean up existing assignments
+    const existingAssignments = await getDocs(query(collection(db, "assignments"), where("memberId", "==", user.uid)));
+    const batchPromises = existingAssignments.docs.map((docSnap) => deleteDoc(docSnap.ref));
+    await Promise.all(batchPromises);
+
+    // Update user status
+    const updateData: any = {
       status: "active",
       isActive: true,
       emailVerified: true,
       phoneVerified: true,
       activatedAt: serverTimestamp(),
-    });
+    };
+
+    if (bestAdmin) {
+      // Create new assignment
+      const assignmentRef = doc(collection(db, "assignments"));
+      await setDoc(assignmentRef, {
+        adminId: bestAdmin.id,
+        memberId: user.uid,
+        assignedAt: serverTimestamp(),
+      });
+      updateData.assignedAdminId = bestAdmin.id;
+    }
+
+    await updateDoc(userRef, updateData);
     await reloadFirebaseUser();
     await refreshUser();
-    return { success: true, noAdminAvailable: true };
+
+    return {
+      success: true,
+      assignedAdminId: bestAdmin?.id ?? null,
+      noAdminAvailable: !bestAdmin,
+    };
   };
 
 

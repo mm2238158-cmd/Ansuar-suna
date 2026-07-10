@@ -88,7 +88,7 @@ service cloud.firestore {
           && request.resource.data.status == resource.data.status
           && request.resource.data.isActive == resource.data.isActive
         ) || (
-          // Owner self-activation after verifying email + phone
+          // Owner self-activation after verifying email + phone (with admin assignment)
           isOwnUser(userId)
           && resource.data.status == "pending"
           && request.resource.data.status == "active"
@@ -96,8 +96,9 @@ service cloud.firestore {
           && request.auth.token.email_verified == true
           && request.auth.token.phone_number is string
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            "status", "isActive", "emailVerified", "phoneVerified", "activatedAt"
+            "status", "isActive", "emailVerified", "phoneVerified", "activatedAt", "assignedAdminId"
           ])
+          && (!request.resource.data.keys().hasAny(["assignedAdminId"]) || request.resource.data.assignedAdminId is string)
         ) || (
           // Super admin governance
           isSuperAdmin()
@@ -139,7 +140,21 @@ service cloud.firestore {
           || resource.data.memberId == request.auth.uid
         ));
 
-      allow create, update, delete: if isSuperAdmin();
+      allow create: if isSuperAdmin()
+        || (
+          // Allow users to create assignment during self-activation
+          signedIn()
+          && request.resource.data.memberId == request.auth.uid
+          && request.resource.data.keys().hasOnly([
+            "adminId",
+            "memberId",
+            "assignedAt"
+          ])
+          && request.resource.data.adminId is string
+          && request.resource.data.assignedAt is timestamp
+        );
+
+      allow update, delete: if isSuperAdmin();
     }
 
     match /payments/{paymentId} {

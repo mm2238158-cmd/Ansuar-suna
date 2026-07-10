@@ -1,6 +1,6 @@
 type Gender = "male" | "female";
 
-interface AdminUser {
+export interface AdminUser {
   id: string;
   name: string;
   gender?: Gender;
