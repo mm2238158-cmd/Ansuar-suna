@@ -161,7 +161,7 @@ const VerifyAccount = () => {
     } catch (err: unknown) {
       toast({
         title: "Error",
-        description: getCallableErrorMessage(err, t.auth.verifyActivateFailed),
+        description: getAuthErrorMessage(err, t.auth),
         variant: "destructive",
       });
     } finally {
