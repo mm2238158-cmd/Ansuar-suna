@@ -1,55 +1,46 @@
-## What your screenshot shows
+## Diagnosis
 
-- **Phone auth enforcement: ENFORCE** — Firebase requires a valid reCAPTCHA Enterprise token for every `sendVerificationCode` call.
-- **SMS fraud threshold: Block some (0.5)** — any request scoring ≥ 0.5 is silently dropped.
-- **Configured site keys: only "Ansuarusuna production key"** — that key is almost certainly restricted to your production domain, not the Lovable preview host.
+The latest network evidence shows two separate Firebase server responses:
 
-Result on the preview URL (`id-preview--…lovable.app`):
-1. Enterprise runs with a key that doesn't cover this domain → token invalid / low score.
-2. Fraud filter (0.5) drops the SMS.
-3. SDK falls back to reCAPTCHA v2, which also can't attach on an unregistered domain.
-4. You get `auth/error-code:-39`.
+1. `400 INVALID_APP_CREDENTIAL` on the Enterprise token request.
+2. `503 Error code: 39` on the fallback request.
 
-No app code change can bypass this — it's 100% a Console config problem. Below is the exact fix.
+That means the app is reaching Firebase correctly, but Firebase is rejecting/restricting the phone verification request server-side. Since you already completed the Console domain/enforcement steps, the next safest path is to stop depending on real SMS while testing and add better in-app diagnostics for the remaining cases.
 
-## Plan — Firebase Console changes (do these, in order)
+## Plan
 
-### 1. Authorized domains
-Authentication → **Settings → Authorized domains** → Add domain, add each of:
-- `localhost`
-- `id-preview--0191d12d-f5fd-4987-84e5-e3995d4c670c.lovable.app`
-- `0191d12d-f5fd-4987-84e5-e3995d4c670c.lovableproject.com`
-- your published `*.lovable.app` host (after first publish)
-- your custom production domain (when live)
+### 1. Use Firebase test phone numbers for registration testing
+- In Firebase Console → Authentication → Sign-in method → Phone → **Phone numbers for testing**.
+- Add your test number, for example `+251715026866`, with a fixed code like `123456`.
+- This bypasses real SMS delivery, toll-fraud scoring, carrier restrictions, and quota restrictions.
+- You can finish testing account registration immediately without waiting for Firebase/Google SMS approval.
 
-### 2. Phone auth enforcement → AUDIT
-Same page → **Phone authentication enforcement mode** → pencil → change **ENFORCE → AUDIT** → Save.
-This lets SMS send while Firebase still scores requests, so you can confirm the flow works before re-tightening.
+### 2. Update app error handling for the real observed responses
+- Treat `INVALID_APP_CREDENTIAL` as a domain/site-key mismatch message.
+- Treat `503 Error code: 39` as a Firebase SMS restriction/quota/region/backend restriction message, not only a reCAPTCHA setup issue.
+- Show the user a clear next action: use a Firebase test phone number now, or contact Firebase support / verify billing + SMS region policy for real numbers.
 
-### 3. SMS fraud threshold → Don't block
-**SMS fraud risk threshold score** → pencil → move slider all the way left to **Don't block** → Save.
-`Block some (0.5)` will silently drop OTPs on preview/localhost because those domains have no device signal and always score high.
+### 3. Add a visible testing hint on the phone verification step
+- If the app is running on Lovable preview/project domains, show a short note explaining that real SMS may be blocked by Firebase and test phone numbers are recommended during development.
+- Keep this small and only near the OTP button.
 
-### 4. Site key coverage (only if you later switch back to ENFORCE)
-**Configured platform site keys → Configure site keys →** open "Ansuarusuna production key" and add every domain from step 1 to its allowed domains list in Google Cloud reCAPTCHA console. If it can't be edited, create a new Web key covering all domains and register it here. Do **not** switch enforcement back to ENFORCE until this is done and tested.
+### 4. Keep the existing reCAPTCHA cleanup/remount logic
+- The current verifier cleanup and fresh container retry logic should stay.
+- No need to rewrite the auth flow; the failure is not coming from React state or the form.
 
-### 5. SMS region policy
-Authentication → **Settings → SMS regions** → confirm **Ethiopia (+251)** is allowed. Deny-list everything else you don't need to avoid toll fraud.
+### 5. Verify
+- Typecheck the frontend.
+- Confirm the new messages compile in English, Amharic, and Oromo translation files.
 
-### 6. Propagation + retry
-Wait ~60s, hard-refresh the app (Cmd/Ctrl-Shift-R), open Register → Verify phone → Send OTP.
-Expected: SMS arrives, no `-39`.
+## Technical details
 
-## What I will NOT change in code
+Observed request:
 
-The app-side hardening (specific `-39` messaging, container remount on retry, verifier cleanup, i18n strings, README checklist) is already in place from the previous turn. There is nothing else code can do — Firebase blocks the request before the SDK can retry.
+```text
+POST accounts:sendVerificationCode
+Origin: https://0191d12d-f5fd-4987-84e5-e3995d4c670c.lovableproject.com
+Response 1: 400 INVALID_APP_CREDENTIAL
+Response 2: 503 Error code: 39
+```
 
-## Verify
-
-After step 6:
-- **Success** → SMS arrives, code confirms, account activates. Then optionally redo step 4 and flip enforcement back to ENFORCE for production hardening.
-- **Still fails** → the new error mapping will show a specific code (`auth/unauthorized-domain`, `auth/quota-exceeded`, `auth/invalid-phone-number`, etc.) that pinpoints which of the five settings above is still wrong. Send me the new message and I'll narrow it further.
-
-## Files that will change
-
-None. This is a Console-only fix.
+This confirms the remaining issue is Firebase Auth phone-verification infrastructure/configuration for real SMS, not a broken button or missing reCAPTCHA container.
