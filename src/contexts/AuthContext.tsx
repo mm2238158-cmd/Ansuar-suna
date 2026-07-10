@@ -13,9 +13,8 @@ import {
   type User,
   type ConfirmationResult,
 } from "firebase/auth";
-import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
-import { auth, db, googleProvider, functions } from "@/lib/firebase";
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp } from "firebase/firestore";
+import { auth, db, googleProvider } from "@/lib/firebase";
 import { isValidE164, normalizePhone, RECAPTCHA_CONTAINER_ID } from "@/lib/phone-utils";
 import type { AppUser, Gender } from "@/lib/types";
 
@@ -198,12 +197,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const activateAccount = async (): Promise<ActivateAccountResult> => {
-    const callable = httpsCallable<void, ActivateAccountResult>(functions, "activateAccount");
-    const result = await callable();
+    await reloadFirebaseUser();
+    const user = auth.currentUser;
+    if (!user) throw new Error("NOT_SIGNED_IN");
+    if (!user.emailVerified) throw new Error("EMAIL_NOT_VERIFIED");
+    if (!user.phoneNumber) throw new Error("PHONE_NOT_VERIFIED");
+    // Force-refresh the ID token so Firestore rules see email_verified + phone_number claims
+    await user.getIdToken(true);
+    await updateDoc(doc(db, "users", user.uid), {
+      status: "active",
+      isActive: true,
+      emailVerified: true,
+      phoneVerified: true,
+      activatedAt: serverTimestamp(),
+    });
     await reloadFirebaseUser();
     await refreshUser();
-    return result.data;
+    return { success: true, noAdminAvailable: true };
   };
+
 
   const loginWithGoogle = async () => {
     const cred = await signInWithPopup(auth, googleProvider);

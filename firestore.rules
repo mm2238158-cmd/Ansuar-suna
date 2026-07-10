@@ -88,10 +88,19 @@ service cloud.firestore {
           && request.resource.data.status == resource.data.status
           && request.resource.data.isActive == resource.data.isActive
         ) || (
+          // Owner self-activation after verifying email + phone
+          isOwnUser(userId)
+          && resource.data.status == "pending"
+          && request.resource.data.status == "active"
+          && request.resource.data.isActive == true
+          && request.auth.token.email_verified == true
+          && request.auth.token.phone_number is string
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            "status", "isActive", "emailVerified", "phoneVerified", "activatedAt"
+          ])
+        ) || (
           // Super admin governance
           isSuperAdmin()
-          // Pending users must activate via Cloud Function (email + phone verification)
-          && !(resource.data.status == "pending" && request.resource.data.status == "active")
           // isFounder is immutable from the app
           && !request.resource.data.diff(resource.data).affectedKeys().hasAny(["isFounder"])
           // Cannot modify a founder unless you are that founder
