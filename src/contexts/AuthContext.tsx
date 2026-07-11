@@ -144,8 +144,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error("ACCOUNT_NOT_ELIGIBLE_FOR_ACTIVATION");
     }
 
-    // Fetch eligible admins
-    const adminsSnap = await getDocs(query(collection(db, "users"), where("role", "==", "admin")));
+    // Fetch eligible admins (filter isActive==true so Firestore rules permit the read)
+    const adminsSnap = await getDocs(
+      query(collection(db, "users"), where("role", "==", "admin"), where("isActive", "==", true))
+    );
     const admins: AdminUser[] = adminsSnap.docs.map((d) => ({
       id: d.id,
       name: (d.data().name as string) || "",
