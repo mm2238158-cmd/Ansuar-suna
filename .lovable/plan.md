@@ -1,63 +1,110 @@
-## Problem
+## Problem diagnosis
 
-Clicking **Activate account** calls the `activateAccount` Cloud Function via `httpsCallable`. It returns `internal`, which means either:
+**1. "Missing or insufficient permissions" on production**
 
-1. The Cloud Function isn't deployed to your Firebase project (very likely — there's no evidence `firebase deploy --only functions` has ever been run against `ansuarusunacharityms`), or
-2. It is deployed but crashes at runtime (e.g. Firestore permission on `assignments`, cold-start error, region mismatch).
+The `firestore.rules` file in this repo has been updated many times (owner self-activation branch, gender validation, phone removal), but **the deployed Firebase project (`ansuarusunacharityms`) is still running an older ruleset**. The Vercel deploy only ships the React app — it does **not** push `firestore.rules` to Firebase. That is the true root cause of both the registration failure and the earlier activation failure.
 
-Either way, the current architecture **hard-blocks account activation on a Cloud Function** you may never be able to deploy from Lovable (Cloud Functions require the Blaze plan + a local `firebase deploy`). Your Firestore rules also explicitly forbid the `pending → active` transition from any client, so there is no fallback path today. That's the root cause of "once and for all" pain here.
+Secondary fragility in `activateAccount()`: it calls `getDocs(query(users, where role==admin))` and `getDocs(collection(assignments))` from a *pending* member. RLS only lets a member read admin docs where `isActive == true`, and any admin row failing that predicate fails the whole query with `permission-denied`. So even with correct rules, activation can break the moment an inactive admin exists.
 
-## Fix — remove the Cloud Function dependency for activation
+**2. Super Admin Dashboard is cluttered**
 
-Do activation **entirely client-side**, using Firebase Auth's own verified state as the source of truth (Firestore rules can read `request.auth.token.email_verified` and `request.auth.token.phone_number`). Admin assignment stays a Super Admin responsibility (done later from the admin UI), so members are never blocked on a backend deploy.
+Current layout mixes 2 hero cards + 4 quick actions + 5 secondary cards + trend chips = visual noise, competing emphases, redundant links (`/payments` appears twice), and metrics that don't drive action (rejected count, admins count).
 
-### 1. `firestore.rules` — allow owner self-activation
+---
 
-Add a third branch to the `users/{userId}` `allow update` rule:
+## Plan
+
+### Step 1 — Make registration & activation permanently unblockable on production
+
+**A. Deploy the rules (one-time user action, cannot be automated from Lovable)**
+
+Add a short note in the plan output telling the user to run:
 
 ```
-// Owner self-activation after verifying email + phone
-|| (
-  isOwnUser(userId)
-  && resource.data.status == "pending"
-  && request.resource.data.status == "active"
-  && request.resource.data.isActive == true
-  && request.auth.token.email_verified == true
-  && request.auth.token.phone_number is string
-  && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-       "status", "isActive", "emailVerified", "phoneVerified", "activatedAt"
-     ])
-)
+firebase deploy --only firestore:rules,storage
 ```
 
-Also remove the `!(pending → active)` block from the super-admin branch (no longer needed; owner path handles it and super admin can still edit everything else). Keep every other rule untouched.
+from their local machine (or wire it into their Vercel build). Without this, no code change here fixes production.
 
-### 2. `src/contexts/AuthContext.tsx` — replace callable with direct Firestore write
+**B. Harden `activateAccount()` so it never depends on reading other users/assignments**
 
-Rewrite `activateAccount()`:
+Rewrite `src/contexts/AuthContext.tsx` `activateAccount()` to do the minimum:
 
-- `reloadFirebaseUser()` first.
-- Guard: `auth.currentUser.emailVerified` and `auth.currentUser.phoneNumber` must both be truthy — otherwise throw a clear i18n error.
-- `updateDoc(doc(db, "users", uid), { status: "active", isActive: true, emailVerified: true, phoneVerified: true, activatedAt: serverTimestamp() })`.
-- Return `{ success: true, noAdminAvailable: true }` (assignment happens later via Super Admin) so the existing UI shows the "activated, awaiting admin" toast.
-- Drop the `httpsCallable` import and the `functions` usage from this file.
+1. Reload user, force ID token refresh.
+2. `updateDoc(users/{uid}, { status:"active", isActive:true, emailVerified:true, activatedAt: serverTimestamp() })`.
+3. Return `{ success:true, noAdminAvailable:true }` (Super Admin will assign later from the Users page — that flow already exists).
 
-### 3. `src/pages/VerifyAccount.tsx` — clearer error
+Drop the admin query, assignments query, assignment create, and delete logic entirely from the member-side path. Admin auto-assignment stays available inside Super Admin tools where the caller actually has permission.
 
-Swap `getCallableErrorMessage` for `getAuthErrorMessage` in the activate handler so Firestore permission / verification errors surface with real messages instead of the opaque "Internal".
+**C. Simplify the matching Firestore rule**
 
-### 4. Leave `functions/src/index.ts` alone
+In `firestore.rules`, the self-activation branch becomes:
 
-The Cloud Function stays in the repo for future auto-assignment work, but the app no longer depends on it being deployed.
+```
+isOwnUser(userId)
+&& resource.data.status == "pending"
+&& request.resource.data.status == "active"
+&& request.resource.data.isActive == true
+&& request.auth.token.email_verified == true
+&& request.resource.data.diff(resource.data).affectedKeys()
+     .hasOnly(["status","isActive","emailVerified","activatedAt"])
+```
 
-### 5. Verify
+Remove `assignedAdminId` and `phoneVerified` from the allowed keys (no longer written on this path). Also remove the member-side create/delete branches on `/assignments` — they're no longer needed and were widening the surface.
 
-- `tsgo` typecheck.
-- Manually walk the flow in preview: verify email → verify phone (test number) → Activate account → should land on `/` with a success toast, no "internal" error.
-- Confirm Firestore rules compile (via `firebase deploy --only firestore:rules` when you're ready, or the rules simulator).
+**D. VerifyAccount.tsx**
 
-## Why this ends the loop
+Already good after the previous round; no further change needed beyond confirming the "phone step" UI is fully hidden (already done).
 
-- No Cloud Function deploy needed for signup to work.
-- Rules cryptographically require `email_verified` + `phone_number` in the ID token, so the security posture is equivalent to what the function was enforcing.
-- Admin assignment is decoupled — Super Admin assigns from the existing admin panel; missing assignment no longer blocks the member from finishing sign-up.
+### Step 2 — Rebuild Super Admin Dashboard
+
+Rewrite `src/pages/superadmin/SuperAdminDashboard.tsx` with a focused, professional layout:
+
+```text
+┌────────────────────────────────────────────────────┐
+│  System Overview                                   │
+│  Small greeting + last-updated timestamp           │
+├────────────────────────────────────────────────────┤
+│  [ Pending Approvals ]   [ Collected this month ]  │  ← 2 hero KPIs only
+│   number + CTA            amount ETB + Δ vs prev   │
+├────────────────────────────────────────────────────┤
+│  KPI strip (4 compact tiles, no icons noise):      │
+│  Active Members │ Admins │ Approved │ Pending      │
+├────────────────────────────────────────────────────┤
+│  Quick Actions (3 buttons max, deduped):           │
+│  Review pending users │ Review pending payments │  │
+│  Data health                                       │
+└────────────────────────────────────────────────────┘
+```
+
+Concrete changes:
+
+- Drop the gradient hero cards; use flat `Card` with a single accent border-left in the primary/warning color.
+- Drop the "Create month" and duplicate "View pending" buttons (create-month lives on Payments page, view-pending is redundant with the Payments quick action).
+- Drop the rejected-payments tile from the top view (available on Payments page).
+- Keep trend chip only on "Collected" — that's the only metric where 30-day delta is meaningful.
+- Add a lightweight loading skeleton (currently the page renders zeros while fetching).
+- Fetch once with `Promise.all([usersSnap, paymentsSnap])`.
+- Keep i18n keys already defined; no new translations required (reuse `pendingApprovals`, `totalCollected`, `activeMembers`, `totalAdmins`, `approvedPayments`, `pendingPayments`, `quickActions`, `overview`).
+
+No routing, types, or i18n file changes.
+
+---
+
+## Files touched
+
+- `firestore.rules` — trim self-activation rule; remove member branches on `/assignments`.
+- `src/contexts/AuthContext.tsx` — slim `activateAccount()` to a single `updateDoc`.
+- `src/pages/superadmin/SuperAdminDashboard.tsx` — rewritten for clarity.
+
+## User action required after implementation
+
+Run once from a terminal that has Firebase CLI configured for project `ansuarusunacharityms`:
+
+```
+firebase deploy --only firestore:rules
+```
+
+Until this is run, production will keep showing "Missing or insufficient permissions" no matter what we change in code.  
+  
+BUT DURING ACCOUNT ACTIVATION, I WANT USERS TO BE AUTOMATICALLY ASSIGNED TO LEAST LOADED AND GENDER MATCHING ADMINS!
