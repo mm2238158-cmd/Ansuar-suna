@@ -1,12 +1,17 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // -------- helpers --------
     function signedIn() {
       return request.auth != null;
     }
 
     function userDocPath(userId) {
       return /databases/$(database)/documents/users/$(userId);
+    }
+
+    function monthDocPath(monthId) {
+      return /databases/$(database)/documents/months/$(monthId);
     }
 
     function currentUserExists() {
@@ -16,6 +21,12 @@ service cloud.firestore {
     function currentUserRole() {
       return currentUserExists()
         ? get(userDocPath(request.auth.uid)).data.role
+        : null;
+    }
+
+    function currentUserStatus() {
+      return currentUserExists()
+        ? get(userDocPath(request.auth.uid)).data.status
         : null;
     }
 
@@ -43,6 +54,14 @@ service cloud.firestore {
         || (isAdmin() && resource.data.assignedAdminId == request.auth.uid);
     }
 
+    // Validates that a given user document id points to an active admin.
+    function isActiveAdmin(userId) {
+      return exists(userDocPath(userId))
+        && get(userDocPath(userId)).data.role == "admin"
+        && get(userDocPath(userId)).data.isActive == true;
+    }
+
+    // -------- users --------
     match /users/{userId} {
       allow create: if isOwnUser(userId)
         && request.resource.data.keys().hasOnly([
@@ -59,7 +78,10 @@ service cloud.firestore {
           "phoneVerified"
         ])
         && request.resource.data.name is string
+        && request.resource.data.name.size() >= 2
+        && request.resource.data.name.size() <= 100
         && request.resource.data.phone is string
+        && request.resource.data.phone.size() <= 20
         && request.resource.data.email is string
         && request.resource.data.gender is string
         && request.resource.data.gender in ["male", "female"]
@@ -83,7 +105,10 @@ service cloud.firestore {
             "gender"
           ])
           && request.resource.data.name is string
+          && request.resource.data.name.size() >= 2
+          && request.resource.data.name.size() <= 100
           && request.resource.data.phone is string
+          && request.resource.data.phone.size() <= 20
           && (!request.resource.data.keys().hasAny(["language"]) || request.resource.data.language is string)
           && (!request.resource.data.keys().hasAny(["gender"]) || request.resource.data.gender in ["male", "female"])
           && request.resource.data.status == resource.data.status
@@ -98,7 +123,14 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             "status", "isActive", "emailVerified", "activatedAt", "assignedAdminId", "phoneVerified"
           ])
-          && (!request.resource.data.keys().hasAny(["assignedAdminId"]) || request.resource.data.assignedAdminId is string)
+          // If assignedAdminId is being set, it must reference an active admin (fixes C1).
+          && (
+            !request.resource.data.keys().hasAny(["assignedAdminId"])
+            || (
+              request.resource.data.assignedAdminId is string
+              && isActiveAdmin(request.resource.data.assignedAdminId)
+            )
+          )
         ) || (
           // Super admin governance
           isSuperAdmin()
@@ -123,28 +155,33 @@ service cloud.firestore {
         && resource.data.get("isFounder", false) == false;
     }
 
+    // -------- months --------
     match /months/{monthId} {
       allow read: if signedIn();
       allow create, update, delete: if isSuperAdmin();
     }
 
+    // -------- settings --------
+    // Only the well-known "global" doc is readable to signed-in users. Fixes M4.
     match /settings/{settingId} {
-      allow read: if signedIn();
-      allow create, update, delete: if isSuperAdmin();
+      allow read: if signedIn() && settingId == "global";
+      allow create, update, delete: if isSuperAdmin() && settingId == "global";
     }
 
+    // -------- assignments --------
     match /assignments/{assignmentId} {
       allow read: if isSuperAdmin()
         || (signedIn() && (
           resource.data.adminId == request.auth.uid
           || resource.data.memberId == request.auth.uid
-          // Allow members to read all assignments for admin load calculation during self-activation
-          || currentUserRole() == "member"
+          // Members can read assignments ONLY while they are pending (active self-activation
+          // window). Removes the permanent leak of the whole member/admin graph to every member.
+          || (currentUserRole() == "member" && currentUserStatus() == "pending")
         ));
 
       allow create: if isSuperAdmin()
         || (
-          // Allow users to create assignment during self-activation
+          // Self-activation: pending member creates their own assignment to a real active admin.
           signedIn()
           && request.resource.data.memberId == request.auth.uid
           && request.resource.data.keys().hasOnly([
@@ -154,18 +191,22 @@ service cloud.firestore {
           ])
           && request.resource.data.adminId is string
           && request.resource.data.assignedAt is timestamp
+          && isActiveAdmin(request.resource.data.adminId)
+          && currentUserStatus() == "pending"
         );
 
       allow update: if isSuperAdmin();
 
       allow delete: if isSuperAdmin()
         || (
-          // Allow users to delete their own assignments during activation
+          // Members may only delete their own stale assignments while activating.
           signedIn()
           && resource.data.memberId == request.auth.uid
+          && currentUserStatus() == "pending"
         );
     }
 
+    // -------- payments --------
     match /payments/{paymentId} {
       allow read: if signedIn() && (
         resource.data.userId == request.auth.uid
@@ -187,10 +228,24 @@ service cloud.firestore {
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.monthId is string
         && request.resource.data.amount is number
+        && request.resource.data.amount > 0
         && request.resource.data.penaltyAmount is number
+        && request.resource.data.penaltyAmount >= 0
         && request.resource.data.screenshotUrl is string
+        && request.resource.data.screenshotUrl.size() > 0
         && request.resource.data.isLate is bool
-        && request.resource.data.status == "pending";
+        && request.resource.data.status == "pending"
+        && request.resource.data.submittedAt is timestamp
+        // The target month must exist and be open. Amount must match the month's amount. Fixes C3.
+        && exists(monthDocPath(request.resource.data.monthId))
+        && get(monthDocPath(request.resource.data.monthId)).data.status == "open"
+        && request.resource.data.amount == get(monthDocPath(request.resource.data.monthId)).data.amount
+        // Server-derived lateness: isLate must match request.time vs month.deadline. Fixes C4.
+        && (
+          (request.time > get(monthDocPath(request.resource.data.monthId)).data.deadline)
+            ? request.resource.data.isLate == true
+            : request.resource.data.isLate == false
+        );
 
       allow update: if isSuperAdmin()
         || (
@@ -207,6 +262,7 @@ service cloud.firestore {
       allow delete: if isSuperAdmin();
     }
 
+    // -------- notifications --------
     match /notifications/{notificationId} {
       allow read: if signedIn() && (
         resource.data.userId == request.auth.uid
@@ -228,8 +284,12 @@ service cloud.firestore {
           && request.resource.data.userId is string
           && isAssignedAdminForUser(request.resource.data.userId)
           && request.resource.data.type is string
+          && request.resource.data.title is string
+          && request.resource.data.title.size() <= 120
           && request.resource.data.message is string
+          && request.resource.data.message.size() <= 500
           && request.resource.data.isRead == false
+          && request.resource.data.createdAt is timestamp
         );
 
       allow update: if (
@@ -242,6 +302,7 @@ service cloud.firestore {
       allow delete: if isSuperAdmin();
     }
 
+    // -------- announcements --------
     match /announcements/{announcementId} {
       allow read: if signedIn() && (
         isSuperAdmin()
@@ -250,7 +311,15 @@ service cloud.firestore {
         || (resource.data.target == "admins" && currentUserRole() == "admin")
       );
 
-      allow create, update, delete: if isSuperAdmin();
+      allow create: if isSuperAdmin()
+        && request.resource.data.title is string
+        && request.resource.data.title.size() >= 1
+        && request.resource.data.title.size() <= 120
+        && request.resource.data.message is string
+        && request.resource.data.message.size() >= 1
+        && request.resource.data.message.size() <= 1000
+        && request.resource.data.target in ["all", "members", "admins"];
+      allow update, delete: if isSuperAdmin();
     }
 
     match /{document=**} {
