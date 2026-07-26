@@ -22,9 +22,16 @@ const Notifications = () => {
       setNotifications(notifSnap.docs.map((d) => ({ id: d.id, ...d.data() } as AppNotification)));
 
       const role = appUser.role;
+      // Build list of targets this role can read (super_admin reads all).
+      const targets =
+        role === "super_admin"
+          ? ["all", "members", "admins"]
+          : role === "admin"
+            ? ["all", "admins"]
+            : ["all", "members"];
       const annQ = query(
         collection(db, "announcements"),
-        where("target", "in", ["all", role === "admin" ? "admins" : "members"]),
+        where("target", "in", targets),
         orderBy("createdAt", "desc")
       );
       const annSnap = await getDocs(annQ);
@@ -90,6 +97,7 @@ const Notifications = () => {
                   <div className="flex items-start gap-3">
                     <Bell className={`h-4 w-4 mt-0.5 flex-shrink-0 ${n.isRead ? "text-muted-foreground" : "text-primary"}`} />
                     <div>
+                      {n.title && <p className="text-sm font-semibold">{n.title}</p>}
                       <p className="text-sm">{n.message}</p>
                       <p className="text-xs text-muted-foreground mt-1">
                         {n.createdAt.toDate().toLocaleDateString()}

@@ -7,7 +7,9 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import AppLayout from "@/components/layout/AppLayout";
 import { useEnsureCurrentMonth } from "@/hooks/useEnsureCurrentMonth";
+import { lazy, Suspense } from "react";
 
+// Auth / entry (kept eager: needed for the first paint)
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -15,36 +17,36 @@ import PendingApproval from "./pages/PendingApproval";
 import VerifyAccount from "./pages/VerifyAccount";
 import NotFound from "./pages/NotFound";
 
-// Member
-import MemberHome from "./pages/member/MemberHome";
-import MemberPayments from "./pages/member/MemberPayments";
-import Notifications from "./pages/Notifications";
-import Profile from "./pages/Profile";
+// Member (lazy)
+const MemberHome = lazy(() => import("./pages/member/MemberHome"));
+const MemberPayments = lazy(() => import("./pages/member/MemberPayments"));
+const Notifications = lazy(() => import("./pages/Notifications"));
+const Profile = lazy(() => import("./pages/Profile"));
 
-// Admin
-import AdminDashboard from "./pages/admin/AdminDashboard";
-import AdminPayments from "./pages/admin/AdminPayments";
-import AdminMembers from "./pages/admin/AdminMembers";
+// Admin (lazy)
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const AdminPayments = lazy(() => import("./pages/admin/AdminPayments"));
+const AdminMembers = lazy(() => import("./pages/admin/AdminMembers"));
 
-// Super Admin
-import SuperAdminDashboard from "./pages/superadmin/SuperAdminDashboard";
-import SuperAdminPayments from "./pages/superadmin/SuperAdminPayments";
-import SuperAdminUsers from "./pages/superadmin/SuperAdminUsers";
-import SuperAdminSettings from "./pages/superadmin/SuperAdminSettings";
-import SuperAdminDataHealth from "./pages/superadmin/SuperAdminDataHealth";
+// Super Admin (lazy)
+const SuperAdminDashboard = lazy(() => import("./pages/superadmin/SuperAdminDashboard"));
+const SuperAdminPayments = lazy(() => import("./pages/superadmin/SuperAdminPayments"));
+const SuperAdminUsers = lazy(() => import("./pages/superadmin/SuperAdminUsers"));
+const SuperAdminSettings = lazy(() => import("./pages/superadmin/SuperAdminSettings"));
+const SuperAdminDataHealth = lazy(() => import("./pages/superadmin/SuperAdminDataHealth"));
 
 const queryClient = new QueryClient();
+
+const CenteredSpinner = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+  </div>
+);
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { firebaseUser, appUser, loading } = useAuth();
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
-      </div>
-    );
-  }
+  if (loading) return <CenteredSpinner />;
 
   if (!firebaseUser) return <Navigate to="/login" replace />;
   if (!appUser || appUser.status === "pending") return <Navigate to="/verify-account" replace />;
@@ -60,86 +62,68 @@ const RoleRoutes = () => {
 
   if (role === "super_admin") {
     return (
-      <Routes>
-        <Route path="/" element={<ProtectedRoute><SuperAdminDashboard /></ProtectedRoute>} />
-        <Route path="/payments" element={<ProtectedRoute><SuperAdminPayments /></ProtectedRoute>} />
-        <Route path="/users" element={<ProtectedRoute><SuperAdminUsers /></ProtectedRoute>} />
-        <Route path="/settings" element={<ProtectedRoute><SuperAdminSettings /></ProtectedRoute>} />
-        <Route path="/data-health" element={<ProtectedRoute><SuperAdminDataHealth /></ProtectedRoute>} />
-        <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-        <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
+      <Suspense fallback={<CenteredSpinner />}>
+        <Routes>
+          <Route path="/" element={<ProtectedRoute><SuperAdminDashboard /></ProtectedRoute>} />
+          <Route path="/payments" element={<ProtectedRoute><SuperAdminPayments /></ProtectedRoute>} />
+          <Route path="/users" element={<ProtectedRoute><SuperAdminUsers /></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute><SuperAdminSettings /></ProtectedRoute>} />
+          <Route path="/data-health" element={<ProtectedRoute><SuperAdminDataHealth /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Suspense>
     );
   }
 
   if (role === "admin") {
     return (
-      <Routes>
-        <Route path="/" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
-        <Route path="/payments" element={<ProtectedRoute><AdminPayments /></ProtectedRoute>} />
-        <Route path="/members" element={<ProtectedRoute><AdminMembers /></ProtectedRoute>} />
-        <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-        <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
+      <Suspense fallback={<CenteredSpinner />}>
+        <Routes>
+          <Route path="/" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/payments" element={<ProtectedRoute><AdminPayments /></ProtectedRoute>} />
+          <Route path="/members" element={<ProtectedRoute><AdminMembers /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Suspense>
     );
   }
 
   // Default: member
   return (
-    <Routes>
-      <Route path="/" element={<ProtectedRoute><MemberHome /></ProtectedRoute>} />
-      <Route path="/payments" element={<ProtectedRoute><MemberPayments /></ProtectedRoute>} />
-      <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
-      <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+    <Suspense fallback={<CenteredSpinner />}>
+      <Routes>
+        <Route path="/" element={<ProtectedRoute><MemberHome /></ProtectedRoute>} />
+        <Route path="/payments" element={<ProtectedRoute><MemberPayments /></ProtectedRoute>} />
+        <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+        <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </Suspense>
   );
 };
 
 const AuthEntryRedirect = () => {
   const { appUser, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
-      </div>
-    );
-  }
-
+  if (loading) return <CenteredSpinner />;
   if (appUser?.status === "pending") return <Navigate to="/verify-account" replace />;
   return <Navigate to="/" replace />;
 };
 
 const VerifyAccountRoute = () => {
   const { firebaseUser, appUser, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
-      </div>
-    );
-  }
-
+  if (loading) return <CenteredSpinner />;
   if (!firebaseUser) return <Navigate to="/login" replace />;
   if (appUser?.status === "active") return <Navigate to="/" replace />;
-
   return <VerifyAccount />;
 };
 
 const AppRoutes = () => {
   const { firebaseUser, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
-      </div>
-    );
-  }
+  if (loading) return <CenteredSpinner />;
 
   return (
     <Routes>

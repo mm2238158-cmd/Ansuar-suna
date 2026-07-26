@@ -6,13 +6,12 @@ import {
   signOut,
   signInWithPopup,
   sendPasswordResetEmail,
-  updatePassword,
   sendEmailVerification,
   type User,
 } from "firebase/auth";
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp, collection, getDocs, query, where, deleteDoc } from "firebase/firestore";
 import { auth, db, googleProvider } from "@/lib/firebase";
-import { isValidE164, normalizePhone } from "@/lib/phone-utils";
+import { normalizePhone } from "@/lib/phone-utils";
 import { getEligibleAdmins, pickLeastLoadedAdmin, type AdminUser } from "@/lib/assignment";
 import type { AppUser, Gender } from "@/lib/types";
 
@@ -32,7 +31,6 @@ interface AuthContextType {
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
-  changePassword: (newPassword: string) => Promise<void>;
   refreshUser: () => Promise<void>;
   reloadFirebaseUser: () => Promise<void>;
   resendEmailVerification: () => Promise<void>;
@@ -89,10 +87,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const register = async (email: string, password: string, name: string, phone: string, gender: Gender) => {
+    const normalizedPhone = normalizePhone(phone);
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     await setDoc(doc(db, "users", cred.user.uid), {
-      name,
-      phone,
+      name: name.trim(),
+      phone: normalizedPhone,
       email,
       gender,
       role: "member",
@@ -223,11 +222,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await sendPasswordResetEmail(auth, email);
   };
 
-  const changePassword = async (newPassword: string) => {
-    if (auth.currentUser) {
-      await updatePassword(auth.currentUser, newPassword);
-    }
-  };
 
   return (
     <AuthContext.Provider
@@ -240,7 +234,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loginWithGoogle,
         logout,
         resetPassword,
-        changePassword,
         refreshUser,
         reloadFirebaseUser,
         resendEmailVerification,

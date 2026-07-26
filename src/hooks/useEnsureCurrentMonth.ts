@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { addDoc, collection, doc, getDoc, getDocs, limit, query, updateDoc, where } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, getDocs, limit, query, setDoc, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { AppUser, Month, Settings } from "@/lib/types";
 import { getDeadlineDate, getMonthName, getPeriodKey, isCurrentPeriod, toTimestamp } from "@/lib/month-utils";
@@ -15,6 +15,13 @@ export const useEnsureCurrentMonth = (appUser: AppUser | null) => {
       const now = new Date();
       const periodKey = getPeriodKey(now);
 
+      // Deterministic ID by periodKey avoids the race where two super admins
+      // create two docs for the same month (fixes L2).
+      const monthRef = doc(db, "months", periodKey);
+      const existing = await getDoc(monthRef);
+      if (existing.exists()) return;
+
+      // Legacy: check for a month with matching periodKey field but a different doc ID.
       const existingByKey = await getDocs(
         query(collection(db, "months"), where("periodKey", "==", periodKey), limit(1))
       );
@@ -33,21 +40,23 @@ export const useEnsureCurrentMonth = (appUser: AppUser | null) => {
       const paymentDeadlineDay = settings?.paymentDeadlineDay ?? DEFAULT_DEADLINE_DAY;
       const deadline = getDeadlineDate(now, paymentDeadlineDay);
 
-      await addDoc(collection(db, "months"), {
-        name: getMonthName(now),
-        amount: monthlyAmount,
-        deadline: toTimestamp(deadline),
-        status: "open",
-        createdBy: appUser.id,
-        createdAt: toTimestamp(now),
-        periodKey,
-      });
-
-      await Promise.all(
-        openMonths.docs
-          .filter((d) => d.id !== currentOpen?.id)
-          .map((d) => updateDoc(d.ref, { status: "closed" }))
-      );
+      try {
+        await setDoc(
+          monthRef,
+          {
+            name: getMonthName(now),
+            amount: monthlyAmount,
+            deadline: toTimestamp(deadline),
+            status: "open",
+            createdBy: appUser.id,
+            createdAt: toTimestamp(now),
+            periodKey,
+          },
+          { merge: false }
+        );
+      } catch {
+        // Another super admin created it in parallel; safe to ignore.
+      }
     };
 
     ensure();
