@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { z } from "zod";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,27 @@ import { Link, useNavigate } from "react-router-dom";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Gender } from "@/lib/types";
 import { Eye, EyeOff } from "lucide-react";
+import { normalizePhone, isValidE164 } from "@/lib/phone-utils";
+import { getAuthErrorMessage } from "@/lib/auth-errors";
+
+const registerSchema = z
+  .object({
+    name: z.string().trim().min(2, "Name must be at least 2 characters").max(100),
+    phone: z
+      .string()
+      .trim()
+      .min(7, "Enter a valid phone number")
+      .max(20)
+      .refine((v) => isValidE164(normalizePhone(v)), "Enter a valid phone number (e.g. +2519XXXXXXXX)"),
+    email: z.string().trim().email("Enter a valid email").max(255),
+    gender: z.enum(["male", "female"], { errorMap: () => ({ message: "Please select a gender" }) }),
+    password: z.string().min(8, "Password must be at least 8 characters").max(128),
+    confirmPassword: z.string(),
+  })
+  .refine((v) => v.password === v.confirmPassword, {
+    path: ["confirmPassword"],
+    message: "Passwords do not match",
+  });
 
 const Register = () => {
   const { register } = useAuth();
@@ -28,21 +50,26 @@ const Register = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password !== confirmPassword) {
-      toast({ title: "Error", description: "Passwords do not match", variant: "destructive" });
-      return;
-    }
-    if (!gender) {
-      toast({ title: "Error", description: t.auth.genderRequired, variant: "destructive" });
+    const parsed = registerSchema.safeParse({
+      name,
+      phone,
+      email,
+      gender: gender as Gender,
+      password,
+      confirmPassword,
+    });
+    if (!parsed.success) {
+      const first = parsed.error.errors[0];
+      toast({ title: "Error", description: first.message, variant: "destructive" });
       return;
     }
     setLoading(true);
     try {
-      await register(email, password, name, phone, gender);
+      await register(parsed.data.email, parsed.data.password, parsed.data.name, parsed.data.phone, parsed.data.gender);
       toast({ title: t.auth.verifyEmailSent });
       navigate("/verify-account");
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Error", description: getAuthErrorMessage(err, t.auth), variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -58,24 +85,24 @@ const Register = () => {
           <CardTitle className="text-2xl font-display">{t.auth.register}</CardTitle>
           <CardDescription>{t.common.appName}</CardDescription>
         </CardHeader>
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} noValidate>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t.auth.name}</label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} required placeholder="Full Name" />
+              <label htmlFor="reg-name" className="text-sm font-medium">{t.auth.name}</label>
+              <Input id="reg-name" value={name} onChange={(e) => setName(e.target.value)} required placeholder="Full Name" maxLength={100} />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t.auth.phone}</label>
-              <Input value={phone} onChange={(e) => setPhone(e.target.value)} required placeholder="+251..." />
+              <label htmlFor="reg-phone" className="text-sm font-medium">{t.auth.phone}</label>
+              <Input id="reg-phone" value={phone} onChange={(e) => setPhone(e.target.value)} required placeholder="+251..." maxLength={20} inputMode="tel" />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t.auth.email}</label>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="email@example.com" />
+              <label htmlFor="reg-email" className="text-sm font-medium">{t.auth.email}</label>
+              <Input id="reg-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="email@example.com" maxLength={255} />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t.auth.gender}</label>
+              <label htmlFor="reg-gender" className="text-sm font-medium">{t.auth.gender}</label>
               <Select value={gender} onValueChange={(value) => setGender(value as Gender)}>
-                <SelectTrigger>
+                <SelectTrigger id="reg-gender">
                   <SelectValue placeholder={t.auth.selectGender} />
                 </SelectTrigger>
                 <SelectContent>
@@ -85,15 +112,18 @@ const Register = () => {
               </Select>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t.auth.password}</label>
+              <label htmlFor="reg-password" className="text-sm font-medium">{t.auth.password}</label>
               <div className="relative">
                 <Input
+                  id="reg-password"
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   placeholder="••••••••"
                   className="pr-11"
+                  minLength={8}
+                  maxLength={128}
                 />
                 <Button
                   type="button"
@@ -108,15 +138,18 @@ const Register = () => {
               </div>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t.auth.confirmPassword}</label>
+              <label htmlFor="reg-confirm" className="text-sm font-medium">{t.auth.confirmPassword}</label>
               <div className="relative">
                 <Input
+                  id="reg-confirm"
                   type={showConfirmPassword ? "text" : "password"}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
                   placeholder="••••••••"
                   className="pr-11"
+                  minLength={8}
+                  maxLength={128}
                 />
                 <Button
                   type="button"

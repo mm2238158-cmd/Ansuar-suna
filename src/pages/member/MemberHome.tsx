@@ -73,9 +73,16 @@ const MemberHome = () => {
   }, [appUser]);
 
   useEffect(() => {
-    const i = setInterval(() => setNow(Date.now()), 1000);
+    if (!currentMonth) return;
+    // Adaptive tick: 1s under a minute, 30s under an hour, 5m otherwise. Saves battery on
+    // low-end phones per audit performance note.
+    const { deadlineMs } = resolveMonthWindow(currentMonth);
+    const remainingMs = Math.abs(deadlineMs - now);
+    const interval =
+      remainingMs < 60_000 ? 1000 : remainingMs < 3_600_000 ? 30_000 : 5 * 60_000;
+    const i = setInterval(() => setNow(Date.now()), interval);
     return () => clearInterval(i);
-  }, []);
+  }, [currentMonth, now]);
 
   const countdown = useMemo(() => {
     if (!currentMonth) return null;

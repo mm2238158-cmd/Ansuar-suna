@@ -52,13 +52,18 @@ const AdminMembers = () => {
       await addDoc(collection(db, "notifications"), {
         userId,
         type: "reminder",
+        title: t.notifications.reminderPayment,
         message: "Please submit your monthly contribution payment.",
         isRead: false,
         createdAt: Timestamp.now(),
       });
       toast({ title: t.admin.reminderSent });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to send reminder",
+        variant: "destructive",
+      });
     }
   };
 

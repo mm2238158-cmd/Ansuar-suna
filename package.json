@@ -1,7 +1,7 @@
 {
   "name": "vite_react_shadcn_ts",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,10 +11,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "functions:build": "npm --prefix functions run build",
-    "functions:deploy": "firebase deploy --only functions",
-    "rules:deploy": "firebase deploy --only firestore:rules",
-    "deploy:auth": "firebase deploy --only functions,firestore:rules"
+    "rules:deploy": "firebase deploy --only firestore:rules,storage"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
