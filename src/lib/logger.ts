@@ -7,13 +7,21 @@
 
 type Meta = Record<string, unknown>;
 
-let sentryPromise: Promise<typeof import("@sentry/react")> | null = null;
+interface SentryLike {
+  init: (options: Record<string, unknown>) => void;
+  captureException: (error: Error, context?: Record<string, unknown>) => void;
+}
+
+// Resolved at runtime only; the package is optional and may not be installed.
+const SENTRY_MODULE = "@sentry/react";
+
+let sentryPromise: Promise<SentryLike> | null = null;
 const dsn = import.meta.env.VITE_SENTRY_DSN as string | undefined;
 
 const loadSentry = () => {
   if (!dsn) return null;
   if (!sentryPromise) {
-    sentryPromise = import("@sentry/react")
+    sentryPromise = (import(/* @vite-ignore */ SENTRY_MODULE) as Promise<SentryLike>)
       .then((Sentry) => {
         Sentry.init({ dsn, environment: import.meta.env.MODE, tracesSampleRate: 0 });
         return Sentry;
@@ -25,6 +33,7 @@ const loadSentry = () => {
   }
   return sentryPromise;
 };
+
 
 export const logError = (scope: string, err: unknown, meta?: Meta) => {
   console.error(`[${scope}]`, err, meta ?? "");
