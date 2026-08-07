@@ -322,6 +322,16 @@ service cloud.firestore {
       allow update, delete: if isSuperAdmin();
     }
 
+    // Append-only audit trail of privileged actions.
+    match /auditLogs/{logId} {
+      allow read: if isSuperAdmin();
+      allow create: if isSignedIn()
+        && request.resource.data.actorId == request.auth.uid
+        && request.resource.data.action is string
+        && request.resource.data.action.size() <= 60;
+      allow update, delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

@@ -12,6 +12,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { CheckCircle, XCircle, Shield, User, Crown } from "lucide-react";
 import { fetchAdminAssignmentCounts, sortAdminsByLoad } from "@/lib/assignment-utils";
+import ListToolbar from "@/components/ListToolbar";
+import EmptyState from "@/components/EmptyState";
+import { writeAuditLog } from "@/lib/audit";
+import { downloadCsv, timestampedFilename, toCsv } from "@/lib/csv";
 
 const SuperAdminUsers = () => {
   const { t } = useLanguage();
@@ -25,6 +29,7 @@ const SuperAdminUsers = () => {
   const [promoteDialog, setPromoteDialog] = useState<{ user: UserType; newRole: string } | null>(null);
   const [adminRoleDialog, setAdminRoleDialog] = useState<{ user: UserType; gender: Gender | "" } | null>(null);
   const [adminMemberCounts, setAdminMemberCounts] = useState<Record<string, number>>({});
+  const [search, setSearch] = useState("");
 
   const isFounder = !!appUser?.isFounder;
   const currentUid = appUser?.id;
@@ -73,15 +78,16 @@ const SuperAdminUsers = () => {
 
   const toggleActive = async (u: UserType) => {
     if (isLocked(u)) {
-      toast({ title: "Action blocked", description: u.id === currentUid ? "You cannot deactivate yourself." : "Founder cannot be modified.", variant: "destructive" });
+      toast({ title: t.toasts.actionBlocked, description: u.id === currentUid ? t.toasts.cannotDeactivateSelf : t.toasts.founderProtected, variant: "destructive" });
       return;
     }
     if (u.role === "super_admin" && u.isActive && activeSuperAdminCount() <= 1) {
-      toast({ title: "Action blocked", description: "Cannot deactivate the last active super admin.", variant: "destructive" });
+      toast({ title: t.toasts.actionBlocked, description: t.toasts.lastSuperAdminDeactivate, variant: "destructive" });
       return;
     }
     await updateDoc(doc(db, "users", u.id), { isActive: !u.isActive, status: !u.isActive ? "active" : "inactive" });
-    toast({ title: u.isActive ? "User deactivated" : "User activated" });
+    void writeAuditLog(u.isActive ? "user.deactivate" : "user.activate", currentUid, { targetId: u.id });
+    toast({ title: u.isActive ? t.toasts.userDeactivated : t.toasts.userActivated });
     fetchUsers();
   };
 
@@ -94,37 +100,39 @@ const SuperAdminUsers = () => {
 
   const performRoleChange = async (u: UserType, role: string) => {
     await updateDoc(doc(db, "users", u.id), { role });
-    toast({ title: "Role updated" });
+    void writeAuditLog("role.change", currentUid, { targetId: u.id, from: u.role, to: role });
+    toast({ title: t.toasts.roleUpdated });
     fetchUsers();
   };
 
   const confirmAdminRole = async () => {
     if (!adminRoleDialog || !adminRoleDialog.gender) {
-      toast({ title: "Error", description: t.superAdmin.genderRequiredForAdmin, variant: "destructive" });
+      toast({ title: t.toasts.error, description: t.superAdmin.genderRequiredForAdmin, variant: "destructive" });
       return;
     }
     await updateDoc(doc(db, "users", adminRoleDialog.user.id), {
       gender: adminRoleDialog.gender,
       role: "admin",
     });
-    toast({ title: "Role updated" });
+    toast({ title: t.toasts.roleUpdated });
+    void writeAuditLog("role.change", currentUid, { targetId: adminRoleDialog.user.id, to: "admin" });
     setAdminRoleDialog(null);
     fetchUsers();
   };
 
   const changeRole = async (u: UserType, role: string) => {
     if (isLocked(u)) {
-      toast({ title: "Action blocked", description: u.id === currentUid ? "You cannot change your own role." : "Founder role cannot be changed.", variant: "destructive" });
+      toast({ title: t.toasts.actionBlocked, description: u.id === currentUid ? t.toasts.cannotChangeOwnRole : t.toasts.founderRoleProtected, variant: "destructive" });
       return;
     }
     // Last-super-admin guard when demoting
     if (u.role === "super_admin" && role !== "super_admin" && activeSuperAdminCount() <= 1) {
-      toast({ title: "Action blocked", description: "Cannot demote the last active super admin.", variant: "destructive" });
+      toast({ title: t.toasts.actionBlocked, description: t.toasts.lastSuperAdminDemote, variant: "destructive" });
       return;
     }
     // Founder-only minting of super_admins
     if (role === "super_admin" && !isFounder) {
-      toast({ title: "Action blocked", description: "Only the founder can promote users to super admin.", variant: "destructive" });
+      toast({ title: t.toasts.actionBlocked, description: t.toasts.founderOnlyPromote, variant: "destructive" });
       return;
     }
     if (role === "super_admin") {
@@ -147,14 +155,38 @@ const SuperAdminUsers = () => {
   const assignAdmin = async () => {
     if (!assignDialog || !selectedAdmin) return;
     await assignMemberToAdmin(assignDialog.id, selectedAdmin);
-    toast({ title: "Admin assigned" });
+    void writeAuditLog("user.assign_admin", currentUid, { memberId: assignDialog.id, adminId: selectedAdmin });
+    toast({ title: t.toasts.adminAssigned });
     setAssignDialog(null);
     setSelectedAdmin("");
   };
 
-  const filtered = filter === "all" ? users :
+  const byFilter = filter === "all" ? users :
     filter === "pending" ? users.filter((u) => u.status === "pending") :
     users.filter((u) => u.role === filter);
+
+  const term = search.trim().toLowerCase();
+  const filtered = term
+    ? byFilter.filter((u) =>
+        [u.name, u.email, u.phone].some((v) => (v ?? "").toLowerCase().includes(term))
+      )
+    : byFilter;
+
+  const exportUsers = () => {
+    const csv = toCsv(filtered, [
+      { key: "name", header: "Name", value: (u) => u.name },
+      { key: "email", header: "Email", value: (u) => u.email },
+      { key: "phone", header: "Phone", value: (u) => u.phone },
+      { key: "role", header: "Role", value: (u) => u.role },
+      { key: "status", header: "Status", value: (u) => u.status },
+      { key: "gender", header: "Gender", value: (u) => u.gender ?? "" },
+      { key: "active", header: "Active", value: (u) => (u.isActive ? "yes" : "no") },
+      { key: "admin", header: "Assigned admin", value: (u) => u.assignedAdminId ?? "" },
+      { key: "joined", header: "Joined at", value: (u) => u.joinedAt?.toDate?.().toISOString() ?? "" },
+    ]);
+    downloadCsv(timestampedFilename("users"), csv);
+    toast({ title: t.toasts.exported });
+  };
 
   const statusBadge = (user: UserType) => {
     const colors: Record<string, string> = {
@@ -199,6 +231,17 @@ const SuperAdminUsers = () => {
         </Select>
       </div>
 
+      <ListToolbar
+        id="superadmin-users-search"
+        value={search}
+        onChange={setSearch}
+        onExport={filtered.length ? exportUsers : undefined}
+      />
+
+      {filtered.length === 0 && (
+        <EmptyState title={t.common.noResults} description={t.common.noData} />
+      )}
+
       {/* Mobile */}
       <div className="md:hidden space-y-3">
         {filtered.map((u) => {
@@ -220,12 +263,12 @@ const SuperAdminUsers = () => {
                 </div>
                 {!locked && u.role !== "super_admin" && (
                   <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">{t.superAdmin.gender}</label>
+                    <label htmlFor={`gender-${u.id}`} className="text-xs text-muted-foreground">{t.superAdmin.gender}</label>
                     <Select
                       value={u.gender || ""}
                       onValueChange={(v) => updateUserGender(u, v as Gender)}
                     >
-                      <SelectTrigger className="h-8">
+                      <SelectTrigger className="h-8" id={`gender-${u.id}`} aria-label={t.superAdmin.gender}>
                         <SelectValue placeholder={t.auth.selectGender} />
                       </SelectTrigger>
                       <SelectContent>
@@ -317,12 +360,12 @@ const SuperAdminUsers = () => {
                     <TableCell>
                       <div className="flex gap-1">
                         {u.status !== "pending" && (
-                          <Button size="sm" variant="ghost" onClick={() => toggleActive(u)} disabled={locked}>
+                          <Button size="sm" variant="ghost" onClick={() => toggleActive(u)} disabled={locked} aria-label={u.isActive ? t.superAdmin.deactivateUser : t.superAdmin.activateUser}>
                             {u.isActive ? <XCircle className="h-4 w-4 text-destructive" /> : <CheckCircle className="h-4 w-4 text-success" />}
                           </Button>
                         )}
                         {u.role === "member" && u.status === "active" && (
-                          <Button size="sm" variant="ghost" onClick={() => setAssignDialog(u)}>
+                          <Button size="sm" variant="ghost" onClick={() => setAssignDialog(u)} aria-label={t.superAdmin.assignAdmin}>
                             <Shield className="h-4 w-4 text-primary" />
                           </Button>
                         )}
