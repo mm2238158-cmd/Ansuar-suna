@@ -9,11 +9,11 @@ import {
   sendEmailVerification,
   type User,
 } from "firebase/auth";
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp, collection, getDocs, query, where, deleteDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp, Timestamp } from "firebase/firestore";
 import { auth, db, googleProvider } from "@/lib/firebase";
 import { normalizePhone } from "@/lib/phone-utils";
-import { getEligibleAdmins, pickLeastLoadedAdmin, type AdminUser } from "@/lib/assignment";
 import type { AppUser, Gender } from "@/lib/types";
+
 
 interface ActivateAccountResult {
   success: boolean;
@@ -70,17 +70,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
-      setFirebaseUser(user);
       if (user) {
-        const appU = await fetchAppUser(user.uid);
-        setAppUser(appU);
+        // Keep the app in its loading state until the profile is actually read,
+        // otherwise routing briefly sees "signed in, no profile" and bounces
+        // every existing user to /verify-account.
+        setLoading(true);
+        let appU: AppUser | null = null;
+        try {
+          appU = await fetchAppUser(user.uid);
+        } finally {
+          setFirebaseUser(user);
+          setAppUser(appU);
+          setLoading(false);
+        }
       } else {
+        setFirebaseUser(null);
         setAppUser(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
     return unsub;
   }, []);
+
 
   const login = async (email: string, password: string) => {
     await signInWithEmailAndPassword(auth, email, password);
@@ -143,65 +154,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error("ACCOUNT_NOT_ELIGIBLE_FOR_ACTIVATION");
     }
 
-    // Fetch eligible admins (filter isActive==true so Firestore rules permit the read)
-    const adminsSnap = await getDocs(
-      query(collection(db, "users"), where("role", "==", "admin"), where("isActive", "==", true))
-    );
-    const admins: AdminUser[] = adminsSnap.docs.map((d) => ({
-      id: d.id,
-      name: (d.data().name as string) || "",
-      gender: d.data().gender as "male" | "female" | undefined,
-      isActive: d.data().isActive as boolean | undefined,
-      role: d.data().role as string,
-    }));
-
-    // Fetch current assignment counts
-    const assignmentsSnap = await getDocs(collection(db, "assignments"));
-    const counts: Record<string, number> = {};
-    assignmentsSnap.docs.forEach((d) => {
-      const adminId = d.data().adminId as string;
-      counts[adminId] = (counts[adminId] ?? 0) + 1;
-    });
-
-    // Pick best admin
-    const eligible = getEligibleAdmins(admins, userData.gender as "male" | "female" | undefined);
-    const bestAdmin = pickLeastLoadedAdmin(eligible, counts);
-
-    // Clean up existing assignments
-    const existingAssignments = await getDocs(query(collection(db, "assignments"), where("memberId", "==", user.uid)));
-    const batchPromises = existingAssignments.docs.map((docSnap) => deleteDoc(docSnap.ref));
-    await Promise.all(batchPromises);
-
-    // Update user status
-    const updateData: any = {
+    // Members are activated without an admin. A super admin assigns them later
+    // from the Assignments page.
+    await updateDoc(userRef, {
       status: "active",
       isActive: true,
       emailVerified: true,
       phoneVerified: false,
       activatedAt: serverTimestamp(),
-    };
-
-    if (bestAdmin) {
-      // Create new assignment
-      const assignmentRef = doc(collection(db, "assignments"));
-      await setDoc(assignmentRef, {
-        adminId: bestAdmin.id,
-        memberId: user.uid,
-        assignedAt: serverTimestamp(),
-      });
-      updateData.assignedAdminId = bestAdmin.id;
-    }
-
-    await updateDoc(userRef, updateData);
+    });
     await reloadFirebaseUser();
     await refreshUser();
 
-    return {
-      success: true,
-      assignedAdminId: bestAdmin?.id ?? null,
-      noAdminAvailable: !bestAdmin,
-    };
+    return { success: true, assignedAdminId: null };
   };
+
 
 
   const loginWithGoogle = async () => {
