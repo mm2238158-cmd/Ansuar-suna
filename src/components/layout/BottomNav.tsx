@@ -1,4 +1,4 @@
-import { Home, CreditCard, Bell, User, LayoutDashboard, Users, Settings } from "lucide-react";
+import { Home, CreditCard, Bell, User, LayoutDashboard, Users, Settings, UserCheck } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -27,8 +27,10 @@ const BottomNav = () => {
     { to: "/", icon: LayoutDashboard, label: t.nav.dashboard },
     { to: "/payments", icon: CreditCard, label: t.nav.payments },
     { to: "/users", icon: Users, label: t.nav.users },
+    { to: "/assignments", icon: UserCheck, label: t.nav.assignments },
     { to: "/settings", icon: Settings, label: t.nav.settings },
   ];
+
 
   const tabs = role === "super_admin" ? superAdminTabs : role === "admin" ? adminTabs : memberTabs;
 

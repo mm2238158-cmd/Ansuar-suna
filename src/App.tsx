@@ -32,8 +32,10 @@ const AdminMembers = lazy(() => import("./pages/admin/AdminMembers"));
 const SuperAdminDashboard = lazy(() => import("./pages/superadmin/SuperAdminDashboard"));
 const SuperAdminPayments = lazy(() => import("./pages/superadmin/SuperAdminPayments"));
 const SuperAdminUsers = lazy(() => import("./pages/superadmin/SuperAdminUsers"));
+const SuperAdminUserAssignments = lazy(() => import("./pages/superadmin/SuperAdminUserAssignments"));
 const SuperAdminSettings = lazy(() => import("./pages/superadmin/SuperAdminSettings"));
 const SuperAdminDataHealth = lazy(() => import("./pages/superadmin/SuperAdminDataHealth"));
+
 
 const queryClient = new QueryClient();
 
@@ -67,7 +69,9 @@ const RoleRoutes = () => {
           <Route path="/" element={<ProtectedRoute><SuperAdminDashboard /></ProtectedRoute>} />
           <Route path="/payments" element={<ProtectedRoute><SuperAdminPayments /></ProtectedRoute>} />
           <Route path="/users" element={<ProtectedRoute><SuperAdminUsers /></ProtectedRoute>} />
+          <Route path="/assignments" element={<ProtectedRoute><SuperAdminUserAssignments /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><SuperAdminSettings /></ProtectedRoute>} />
+
           <Route path="/data-health" element={<ProtectedRoute><SuperAdminDataHealth /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />

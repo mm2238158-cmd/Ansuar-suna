@@ -88,14 +88,11 @@ const VerifyAccount = () => {
     setLoading(true);
     try {
       await syncVerificationState();
-      const result = await activateAccount();
+      await activateAccount();
       await refreshUser();
-      if (result.noAdminAvailable) {
-        toast({ title: t.auth.verifyActivatedNoAdmin });
-      } else {
-        toast({ title: t.auth.verifyActivated });
-      }
+      toast({ title: t.auth.verifyActivated });
       navigate("/", { replace: true });
+
     } catch (err: unknown) {
       toast({
         title: "Error",
