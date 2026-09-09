@@ -56,25 +56,8 @@ const SuperAdminUsers = () => {
     return false;
   };
 
-  const assignMemberToAdmin = async (memberId: string, adminId: string) => {
-    const existingQ = query(collection(db, "assignments"), where("memberId", "==", memberId));
-    const existingSnap = await getDocs(existingQ);
-    await Promise.all(existingSnap.docs.map((d) => deleteDoc(d.ref)));
+  // Admin assignment lives on the dedicated Assignments page.
 
-    await addDoc(collection(db, "assignments"), {
-      adminId,
-      memberId,
-      assignedAt: Timestamp.now(),
-    });
-    await updateDoc(doc(db, "users", memberId), { assignedAdminId: adminId });
-  };
-
-  const getEligibleAdmins = (member?: UserType | null) => {
-    if (!member) return admins.filter((a) => a.isActive);
-    const activeAdmins = admins.filter((a) => a.isActive);
-    if (!member.gender) return activeAdmins;
-    return activeAdmins.filter((a) => a.gender === member.gender);
-  };
 
   const toggleActive = async (u: UserType) => {
     if (isLocked(u)) {
