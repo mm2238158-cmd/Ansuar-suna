@@ -3,15 +3,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
-import { collection, getDocs, doc, updateDoc, query, where, addDoc, Timestamp, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { AppUser as UserType, Gender } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { CheckCircle, XCircle, Shield, User, Crown } from "lucide-react";
-import { fetchAdminAssignmentCounts, sortAdminsByLoad } from "@/lib/assignment-utils";
+import { CheckCircle, XCircle, User, Crown } from "lucide-react";
+
 import ListToolbar from "@/components/ListToolbar";
 import EmptyState from "@/components/EmptyState";
 import { writeAuditLog } from "@/lib/audit";
@@ -24,12 +24,10 @@ const SuperAdminUsers = () => {
   const [users, setUsers] = useState<UserType[]>([]);
   const [admins, setAdmins] = useState<UserType[]>([]);
   const [filter, setFilter] = useState("all");
-  const [assignDialog, setAssignDialog] = useState<UserType | null>(null);
-  const [selectedAdmin, setSelectedAdmin] = useState("");
   const [promoteDialog, setPromoteDialog] = useState<{ user: UserType; newRole: string } | null>(null);
   const [adminRoleDialog, setAdminRoleDialog] = useState<{ user: UserType; gender: Gender | "" } | null>(null);
-  const [adminMemberCounts, setAdminMemberCounts] = useState<Record<string, number>>({});
   const [search, setSearch] = useState("");
+
 
   const isFounder = !!appUser?.isFounder;
   const currentUid = appUser?.id;
@@ -266,11 +264,8 @@ const SuperAdminUsers = () => {
                       {u.isActive ? t.superAdmin.deactivateUser : t.superAdmin.activateUser}
                     </Button>
                   )}
-                  {u.role === "member" && u.status === "active" && (
-                    <Button size="sm" variant="outline" onClick={() => setAssignDialog(u)} className="gap-1">
-                      <Shield className="h-3 w-3" /> {t.superAdmin.assignAdmin}
-                    </Button>
-                  )}
+
+
                 </div>
               </CardContent>
             </Card>
@@ -341,11 +336,8 @@ const SuperAdminUsers = () => {
                             {u.isActive ? <XCircle className="h-4 w-4 text-destructive" /> : <CheckCircle className="h-4 w-4 text-success" />}
                           </Button>
                         )}
-                        {u.role === "member" && u.status === "active" && (
-                          <Button size="sm" variant="ghost" onClick={() => setAssignDialog(u)} aria-label={t.superAdmin.assignAdmin}>
-                            <Shield className="h-4 w-4 text-primary" />
-                          </Button>
-                        )}
+
+
                       </div>
                     </TableCell>
                   </TableRow>
@@ -356,35 +348,8 @@ const SuperAdminUsers = () => {
         </Card>
       </div>
 
-      {/* Assign Admin Dialog */}
-      <Dialog open={!!assignDialog} onOpenChange={() => setAssignDialog(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t.superAdmin.assignAdmin} - {assignDialog?.name}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <Select value={selectedAdmin} onValueChange={setSelectedAdmin}>
-              <SelectTrigger>
-                <SelectValue placeholder={t.superAdmin.selectAdmin} />
-              </SelectTrigger>
-              <SelectContent>
-                {sortAdminsByLoad(getEligibleAdmins(assignDialog), adminMemberCounts).map((a) => {
-                  const count = adminMemberCounts[a.id] ?? 0;
-                  return (
-                    <SelectItem key={a.id} value={a.id}>
-                      {a.name} ({count} {t.superAdmin.adminMemberLoad})
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setAssignDialog(null)} className="flex-1">{t.common.cancel}</Button>
-              <Button onClick={assignAdmin} className="flex-1" disabled={!selectedAdmin}>{t.common.confirm}</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+
+
 
       {/* Promote to Admin (requires gender) */}
       <Dialog open={!!adminRoleDialog} onOpenChange={() => setAdminRoleDialog(null)}>
