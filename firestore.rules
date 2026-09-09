@@ -303,7 +303,7 @@ service cloud.firestore {
     // Append-only audit trail of privileged actions.
     match /auditLogs/{logId} {
       allow read: if isSuperAdmin();
-      allow create: if isSignedIn()
+      allow create: if signedIn()
         && request.resource.data.actorId == request.auth.uid
         && request.resource.data.action is string
         && request.resource.data.action.size() <= 60;
