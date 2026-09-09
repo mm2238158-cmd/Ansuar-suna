@@ -169,42 +169,26 @@ service cloud.firestore {
     }
 
     // -------- assignments --------
+    // Assignments are managed exclusively by super admins from the Assignments page.
+    // No self-assignment during activation any more.
     match /assignments/{assignmentId} {
       allow read: if isSuperAdmin()
         || (signedIn() && (
           resource.data.adminId == request.auth.uid
           || resource.data.memberId == request.auth.uid
-          // Members can read assignments ONLY while they are pending (active self-activation
-          // window). Removes the permanent leak of the whole member/admin graph to every member.
-          || (currentUserRole() == "member" && currentUserStatus() == "pending")
         ));
 
       allow create: if isSuperAdmin()
-        || (
-          // Self-activation: pending member creates their own assignment to a real active admin.
-          signedIn()
-          && request.resource.data.memberId == request.auth.uid
-          && request.resource.data.keys().hasOnly([
-            "adminId",
-            "memberId",
-            "assignedAt"
-          ])
-          && request.resource.data.adminId is string
-          && request.resource.data.assignedAt is timestamp
-          && isActiveAdmin(request.resource.data.adminId)
-          && currentUserStatus() == "pending"
-        );
+        && request.resource.data.keys().hasOnly(["adminId", "memberId", "assignedAt"])
+        && request.resource.data.adminId is string
+        && request.resource.data.memberId is string
+        && isActiveAdmin(request.resource.data.adminId);
 
       allow update: if isSuperAdmin();
 
-      allow delete: if isSuperAdmin()
-        || (
-          // Members may only delete their own stale assignments while activating.
-          signedIn()
-          && resource.data.memberId == request.auth.uid
-          && currentUserStatus() == "pending"
-        );
+      allow delete: if isSuperAdmin();
     }
+
 
     // -------- payments --------
     match /payments/{paymentId} {
