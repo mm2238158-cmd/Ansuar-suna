@@ -135,14 +135,8 @@ const SuperAdminUsers = () => {
     setPromoteDialog(null);
   };
 
-  const assignAdmin = async () => {
-    if (!assignDialog || !selectedAdmin) return;
-    await assignMemberToAdmin(assignDialog.id, selectedAdmin);
-    void writeAuditLog("user.assign_admin", currentUid, { memberId: assignDialog.id, adminId: selectedAdmin });
-    toast({ title: t.toasts.adminAssigned });
-    setAssignDialog(null);
-    setSelectedAdmin("");
-  };
+
+
 
   const byFilter = filter === "all" ? users :
     filter === "pending" ? users.filter((u) => u.status === "pending") :
