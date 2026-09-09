@@ -7,7 +7,8 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import AppLayout from "@/components/layout/AppLayout";
 import { useEnsureCurrentMonth } from "@/hooks/useEnsureCurrentMonth";
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
+import { lazyWithRetry } from "@/lib/lazy-with-retry";
 
 // Auth / entry (kept eager: needed for the first paint)
 import Login from "./pages/Login";
@@ -18,23 +19,23 @@ import VerifyAccount from "./pages/VerifyAccount";
 import NotFound from "./pages/NotFound";
 
 // Member (lazy)
-const MemberHome = lazy(() => import("./pages/member/MemberHome"));
-const MemberPayments = lazy(() => import("./pages/member/MemberPayments"));
-const Notifications = lazy(() => import("./pages/Notifications"));
-const Profile = lazy(() => import("./pages/Profile"));
+const MemberHome = lazyWithRetry(() => import("./pages/member/MemberHome"));
+const MemberPayments = lazyWithRetry(() => import("./pages/member/MemberPayments"));
+const Notifications = lazyWithRetry(() => import("./pages/Notifications"));
+const Profile = lazyWithRetry(() => import("./pages/Profile"));
 
 // Admin (lazy)
-const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
-const AdminPayments = lazy(() => import("./pages/admin/AdminPayments"));
-const AdminMembers = lazy(() => import("./pages/admin/AdminMembers"));
+const AdminDashboard = lazyWithRetry(() => import("./pages/admin/AdminDashboard"));
+const AdminPayments = lazyWithRetry(() => import("./pages/admin/AdminPayments"));
+const AdminMembers = lazyWithRetry(() => import("./pages/admin/AdminMembers"));
 
 // Super Admin (lazy)
-const SuperAdminDashboard = lazy(() => import("./pages/superadmin/SuperAdminDashboard"));
-const SuperAdminPayments = lazy(() => import("./pages/superadmin/SuperAdminPayments"));
-const SuperAdminUsers = lazy(() => import("./pages/superadmin/SuperAdminUsers"));
-const SuperAdminUserAssignments = lazy(() => import("./pages/superadmin/SuperAdminUserAssignments"));
-const SuperAdminSettings = lazy(() => import("./pages/superadmin/SuperAdminSettings"));
-const SuperAdminDataHealth = lazy(() => import("./pages/superadmin/SuperAdminDataHealth"));
+const SuperAdminDashboard = lazyWithRetry(() => import("./pages/superadmin/SuperAdminDashboard"));
+const SuperAdminPayments = lazyWithRetry(() => import("./pages/superadmin/SuperAdminPayments"));
+const SuperAdminUsers = lazyWithRetry(() => import("./pages/superadmin/SuperAdminUsers"));
+const SuperAdminUserAssignments = lazyWithRetry(() => import("./pages/superadmin/SuperAdminUserAssignments"));
+const SuperAdminSettings = lazyWithRetry(() => import("./pages/superadmin/SuperAdminSettings"));
+const SuperAdminDataHealth = lazyWithRetry(() => import("./pages/superadmin/SuperAdminDataHealth"));
 
 
 const queryClient = new QueryClient();
