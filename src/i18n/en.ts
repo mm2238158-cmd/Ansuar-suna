@@ -68,7 +68,7 @@ const en = {
     genderRequired: "Please select gender",
     signUpRequired: "Please sign up first using the registration form.",
     verifyAccountTitle: "Verify Your Account",
-    verifyAccountDesc: "Complete email and phone verification to activate your account automatically.",
+    verifyAccountDesc: "Complete email verification to activate your account automatically.",
     verifyEmailStep: "1. Verify email",
     verifyEmailHelp: "Check your inbox for the verification link, then click the button below.",
     verifyResendEmail: "Resend email",
