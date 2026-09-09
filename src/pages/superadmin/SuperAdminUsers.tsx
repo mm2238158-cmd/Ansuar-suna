@@ -33,15 +33,12 @@ const SuperAdminUsers = () => {
   const currentUid = appUser?.id;
 
   const fetchUsers = async () => {
-    const [snap, counts] = await Promise.all([
-      getDocs(collection(db, "users")),
-      fetchAdminAssignmentCounts(),
-    ]);
+    const snap = await getDocs(collection(db, "users"));
     const all = snap.docs.map((d) => ({ id: d.id, ...d.data() } as UserType));
     setUsers(all);
     setAdmins(all.filter((u) => u.role === "admin"));
-    setAdminMemberCounts(counts);
   };
+
 
   useEffect(() => { fetchUsers(); }, []);
 
