@@ -114,24 +114,18 @@ service cloud.firestore {
           && request.resource.data.status == resource.data.status
           && request.resource.data.isActive == resource.data.isActive
         ) || (
-          // Owner self-activation after verifying email (with admin assignment)
+          // Owner self-activation after verifying email. No admin assignment here:
+          // a super admin assigns the member later from the Assignments page.
           isOwnUser(userId)
           && resource.data.status == "pending"
           && request.resource.data.status == "active"
           && request.resource.data.isActive == true
           && request.auth.token.email_verified == true
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            "status", "isActive", "emailVerified", "activatedAt", "assignedAdminId", "phoneVerified"
+            "status", "isActive", "emailVerified", "activatedAt", "phoneVerified"
           ])
-          // If assignedAdminId is being set, it must reference an active admin (fixes C1).
-          && (
-            !request.resource.data.keys().hasAny(["assignedAdminId"])
-            || (
-              request.resource.data.assignedAdminId is string
-              && isActiveAdmin(request.resource.data.assignedAdminId)
-            )
-          )
         ) || (
+
           // Super admin governance
           isSuperAdmin()
           // isFounder is immutable from the app
@@ -169,42 +163,26 @@ service cloud.firestore {
     }
 
     // -------- assignments --------
+    // Assignments are managed exclusively by super admins from the Assignments page.
+    // No self-assignment during activation any more.
     match /assignments/{assignmentId} {
       allow read: if isSuperAdmin()
         || (signedIn() && (
           resource.data.adminId == request.auth.uid
           || resource.data.memberId == request.auth.uid
-          // Members can read assignments ONLY while they are pending (active self-activation
-          // window). Removes the permanent leak of the whole member/admin graph to every member.
-          || (currentUserRole() == "member" && currentUserStatus() == "pending")
         ));
 
       allow create: if isSuperAdmin()
-        || (
-          // Self-activation: pending member creates their own assignment to a real active admin.
-          signedIn()
-          && request.resource.data.memberId == request.auth.uid
-          && request.resource.data.keys().hasOnly([
-            "adminId",
-            "memberId",
-            "assignedAt"
-          ])
-          && request.resource.data.adminId is string
-          && request.resource.data.assignedAt is timestamp
-          && isActiveAdmin(request.resource.data.adminId)
-          && currentUserStatus() == "pending"
-        );
+        && request.resource.data.keys().hasOnly(["adminId", "memberId", "assignedAt"])
+        && request.resource.data.adminId is string
+        && request.resource.data.memberId is string
+        && isActiveAdmin(request.resource.data.adminId);
 
       allow update: if isSuperAdmin();
 
-      allow delete: if isSuperAdmin()
-        || (
-          // Members may only delete their own stale assignments while activating.
-          signedIn()
-          && resource.data.memberId == request.auth.uid
-          && currentUserStatus() == "pending"
-        );
+      allow delete: if isSuperAdmin();
     }
+
 
     // -------- payments --------
     match /payments/{paymentId} {

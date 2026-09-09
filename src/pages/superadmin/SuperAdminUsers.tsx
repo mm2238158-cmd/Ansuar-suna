@@ -3,15 +3,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
-import { collection, getDocs, doc, updateDoc, query, where, addDoc, Timestamp, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { AppUser as UserType, Gender } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { CheckCircle, XCircle, Shield, User, Crown } from "lucide-react";
-import { fetchAdminAssignmentCounts, sortAdminsByLoad } from "@/lib/assignment-utils";
+import { CheckCircle, XCircle, User, Crown } from "lucide-react";
+
 import ListToolbar from "@/components/ListToolbar";
 import EmptyState from "@/components/EmptyState";
 import { writeAuditLog } from "@/lib/audit";
@@ -24,26 +24,21 @@ const SuperAdminUsers = () => {
   const [users, setUsers] = useState<UserType[]>([]);
   const [admins, setAdmins] = useState<UserType[]>([]);
   const [filter, setFilter] = useState("all");
-  const [assignDialog, setAssignDialog] = useState<UserType | null>(null);
-  const [selectedAdmin, setSelectedAdmin] = useState("");
   const [promoteDialog, setPromoteDialog] = useState<{ user: UserType; newRole: string } | null>(null);
   const [adminRoleDialog, setAdminRoleDialog] = useState<{ user: UserType; gender: Gender | "" } | null>(null);
-  const [adminMemberCounts, setAdminMemberCounts] = useState<Record<string, number>>({});
   const [search, setSearch] = useState("");
+
 
   const isFounder = !!appUser?.isFounder;
   const currentUid = appUser?.id;
 
   const fetchUsers = async () => {
-    const [snap, counts] = await Promise.all([
-      getDocs(collection(db, "users")),
-      fetchAdminAssignmentCounts(),
-    ]);
+    const snap = await getDocs(collection(db, "users"));
     const all = snap.docs.map((d) => ({ id: d.id, ...d.data() } as UserType));
     setUsers(all);
     setAdmins(all.filter((u) => u.role === "admin"));
-    setAdminMemberCounts(counts);
   };
+
 
   useEffect(() => { fetchUsers(); }, []);
 
@@ -56,25 +51,8 @@ const SuperAdminUsers = () => {
     return false;
   };
 
-  const assignMemberToAdmin = async (memberId: string, adminId: string) => {
-    const existingQ = query(collection(db, "assignments"), where("memberId", "==", memberId));
-    const existingSnap = await getDocs(existingQ);
-    await Promise.all(existingSnap.docs.map((d) => deleteDoc(d.ref)));
+  // Admin assignment lives on the dedicated Assignments page.
 
-    await addDoc(collection(db, "assignments"), {
-      adminId,
-      memberId,
-      assignedAt: Timestamp.now(),
-    });
-    await updateDoc(doc(db, "users", memberId), { assignedAdminId: adminId });
-  };
-
-  const getEligibleAdmins = (member?: UserType | null) => {
-    if (!member) return admins.filter((a) => a.isActive);
-    const activeAdmins = admins.filter((a) => a.isActive);
-    if (!member.gender) return activeAdmins;
-    return activeAdmins.filter((a) => a.gender === member.gender);
-  };
 
   const toggleActive = async (u: UserType) => {
     if (isLocked(u)) {
@@ -152,14 +130,8 @@ const SuperAdminUsers = () => {
     setPromoteDialog(null);
   };
 
-  const assignAdmin = async () => {
-    if (!assignDialog || !selectedAdmin) return;
-    await assignMemberToAdmin(assignDialog.id, selectedAdmin);
-    void writeAuditLog("user.assign_admin", currentUid, { memberId: assignDialog.id, adminId: selectedAdmin });
-    toast({ title: t.toasts.adminAssigned });
-    setAssignDialog(null);
-    setSelectedAdmin("");
-  };
+
+
 
   const byFilter = filter === "all" ? users :
     filter === "pending" ? users.filter((u) => u.status === "pending") :
@@ -289,11 +261,8 @@ const SuperAdminUsers = () => {
                       {u.isActive ? t.superAdmin.deactivateUser : t.superAdmin.activateUser}
                     </Button>
                   )}
-                  {u.role === "member" && u.status === "active" && (
-                    <Button size="sm" variant="outline" onClick={() => setAssignDialog(u)} className="gap-1">
-                      <Shield className="h-3 w-3" /> {t.superAdmin.assignAdmin}
-                    </Button>
-                  )}
+
+
                 </div>
               </CardContent>
             </Card>
@@ -364,11 +333,8 @@ const SuperAdminUsers = () => {
                             {u.isActive ? <XCircle className="h-4 w-4 text-destructive" /> : <CheckCircle className="h-4 w-4 text-success" />}
                           </Button>
                         )}
-                        {u.role === "member" && u.status === "active" && (
-                          <Button size="sm" variant="ghost" onClick={() => setAssignDialog(u)} aria-label={t.superAdmin.assignAdmin}>
-                            <Shield className="h-4 w-4 text-primary" />
-                          </Button>
-                        )}
+
+
                       </div>
                     </TableCell>
                   </TableRow>
@@ -379,35 +345,8 @@ const SuperAdminUsers = () => {
         </Card>
       </div>
 
-      {/* Assign Admin Dialog */}
-      <Dialog open={!!assignDialog} onOpenChange={() => setAssignDialog(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t.superAdmin.assignAdmin} - {assignDialog?.name}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <Select value={selectedAdmin} onValueChange={setSelectedAdmin}>
-              <SelectTrigger>
-                <SelectValue placeholder={t.superAdmin.selectAdmin} />
-              </SelectTrigger>
-              <SelectContent>
-                {sortAdminsByLoad(getEligibleAdmins(assignDialog), adminMemberCounts).map((a) => {
-                  const count = adminMemberCounts[a.id] ?? 0;
-                  return (
-                    <SelectItem key={a.id} value={a.id}>
-                      {a.name} ({count} {t.superAdmin.adminMemberLoad})
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setAssignDialog(null)} className="flex-1">{t.common.cancel}</Button>
-              <Button onClick={assignAdmin} className="flex-1" disabled={!selectedAdmin}>{t.common.confirm}</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+
+
 
       {/* Promote to Admin (requires gender) */}
       <Dialog open={!!adminRoleDialog} onOpenChange={() => setAdminRoleDialog(null)}>
