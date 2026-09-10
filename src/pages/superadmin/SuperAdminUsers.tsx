@@ -5,40 +5,42 @@ import { Button } from "@/components/ui/button";
 import { useEffect, useState } from "react";
 import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { AppUser as UserType, Gender } from "@/lib/types";
+import type { AppUser as UserType, Gender, UserRole } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { CheckCircle, XCircle, User, Crown } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { CheckCircle, XCircle, Crown, ShieldCheck } from "lucide-react";
 
 import ListToolbar from "@/components/ListToolbar";
 import EmptyState from "@/components/EmptyState";
 import { writeAuditLog } from "@/lib/audit";
 import { downloadCsv, timestampedFilename, toCsv } from "@/lib/csv";
 
+interface RoleDialogState {
+  user: UserType;
+  role: UserRole;
+  gender: Gender | "";
+}
+
 const SuperAdminUsers = () => {
   const { t } = useLanguage();
   const { appUser } = useAuth();
   const { toast } = useToast();
   const [users, setUsers] = useState<UserType[]>([]);
-  const [admins, setAdmins] = useState<UserType[]>([]);
   const [filter, setFilter] = useState("all");
-  const [promoteDialog, setPromoteDialog] = useState<{ user: UserType; newRole: string } | null>(null);
-  const [adminRoleDialog, setAdminRoleDialog] = useState<{ user: UserType; gender: Gender | "" } | null>(null);
+  const [roleDialog, setRoleDialog] = useState<RoleDialogState | null>(null);
+  const [savingRole, setSavingRole] = useState(false);
   const [search, setSearch] = useState("");
-
 
   const isFounder = !!appUser?.isFounder;
   const currentUid = appUser?.id;
 
   const fetchUsers = async () => {
     const snap = await getDocs(collection(db, "users"));
-    const all = snap.docs.map((d) => ({ id: d.id, ...d.data() } as UserType));
-    setUsers(all);
-    setAdmins(all.filter((u) => u.role === "admin"));
+    setUsers(snap.docs.map((d) => ({ id: d.id, ...d.data() } as UserType)));
   };
-
 
   useEffect(() => { fetchUsers(); }, []);
 
@@ -50,9 +52,6 @@ const SuperAdminUsers = () => {
     if (u.isFounder && !isFounder) return true; // founder protection
     return false;
   };
-
-  // Admin assignment lives on the dedicated Assignments page.
-
 
   const toggleActive = async (u: UserType) => {
     if (isLocked(u)) {
@@ -69,69 +68,54 @@ const SuperAdminUsers = () => {
     fetchUsers();
   };
 
-  const updateUserGender = async (u: UserType, gender: Gender) => {
-    if (isLocked(u)) return;
-    await updateDoc(doc(db, "users", u.id), { gender });
-    toast({ title: t.superAdmin.genderUpdated });
-    fetchUsers();
-  };
-
-  const performRoleChange = async (u: UserType, role: string) => {
-    await updateDoc(doc(db, "users", u.id), { role });
-    void writeAuditLog("role.change", currentUid, { targetId: u.id, from: u.role, to: role });
-    toast({ title: t.toasts.roleUpdated });
-    fetchUsers();
-  };
-
-  const confirmAdminRole = async () => {
-    if (!adminRoleDialog || !adminRoleDialog.gender) {
-      toast({ title: t.toasts.error, description: t.superAdmin.genderRequiredForAdmin, variant: "destructive" });
-      return;
-    }
-    await updateDoc(doc(db, "users", adminRoleDialog.user.id), {
-      gender: adminRoleDialog.gender,
-      role: "admin",
-    });
-    toast({ title: t.toasts.roleUpdated });
-    void writeAuditLog("role.change", currentUid, { targetId: adminRoleDialog.user.id, to: "admin" });
-    setAdminRoleDialog(null);
-    fetchUsers();
-  };
-
-  const changeRole = async (u: UserType, role: string) => {
+  const openRoleDialog = (u: UserType) => {
     if (isLocked(u)) {
-      toast({ title: t.toasts.actionBlocked, description: u.id === currentUid ? t.toasts.cannotChangeOwnRole : t.toasts.founderRoleProtected, variant: "destructive" });
+      toast({
+        title: t.toasts.actionBlocked,
+        description: u.id === currentUid ? t.toasts.cannotChangeOwnRole : t.toasts.founderRoleProtected,
+        variant: "destructive",
+      });
       return;
     }
-    // Last-super-admin guard when demoting
+    setRoleDialog({ user: u, role: u.role, gender: u.gender ?? "" });
+  };
+
+  const confirmRoleChange = async () => {
+    if (!roleDialog) return;
+    const { user: u, role, gender } = roleDialog;
+
+    if (role === u.role && (role !== "admin" || gender === (u.gender ?? ""))) {
+      setRoleDialog(null);
+      return;
+    }
     if (u.role === "super_admin" && role !== "super_admin" && activeSuperAdminCount() <= 1) {
       toast({ title: t.toasts.actionBlocked, description: t.toasts.lastSuperAdminDemote, variant: "destructive" });
       return;
     }
-    // Founder-only minting of super_admins
     if (role === "super_admin" && !isFounder) {
       toast({ title: t.toasts.actionBlocked, description: t.toasts.founderOnlyPromote, variant: "destructive" });
       return;
     }
-    if (role === "super_admin") {
-      setPromoteDialog({ user: u, newRole: role });
+    if (role === "admin" && !gender) {
+      toast({ title: t.toasts.error, description: t.superAdmin.genderRequiredForAdmin, variant: "destructive" });
       return;
     }
-    if (role === "admin" && !u.gender) {
-      setAdminRoleDialog({ user: u, gender: "" });
-      return;
+
+    setSavingRole(true);
+    try {
+      const payload: Record<string, unknown> = { role };
+      if (role === "admin" && gender) payload.gender = gender;
+      await updateDoc(doc(db, "users", u.id), payload);
+      void writeAuditLog("role.change", currentUid, { targetId: u.id, from: u.role, to: role });
+      toast({ title: t.toasts.roleUpdated });
+      setRoleDialog(null);
+      fetchUsers();
+    } catch (err: any) {
+      toast({ title: t.toasts.error, description: err.message, variant: "destructive" });
+    } finally {
+      setSavingRole(false);
     }
-    await performRoleChange(u, role);
   };
-
-  const confirmPromote = async () => {
-    if (!promoteDialog) return;
-    await performRoleChange(promoteDialog.user, promoteDialog.newRole);
-    setPromoteDialog(null);
-  };
-
-
-
 
   const byFilter = filter === "all" ? users :
     filter === "pending" ? users.filter((u) => u.status === "pending") :
@@ -173,6 +157,18 @@ const SuperAdminUsers = () => {
     );
   };
 
+  const roleLabel = (role: UserRole) =>
+    role === "super_admin" ? t.superAdmin.roleSuperAdmin : role === "admin" ? t.superAdmin.roleAdmin : t.superAdmin.roleMember;
+
+  const userAvatar = (u: UserType, size = "h-10 w-10") => (
+    <Avatar className={size}>
+      {u.photoURL && <AvatarImage src={u.photoURL} alt={u.name} />}
+      <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+        {(u.name || "U").split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}
+      </AvatarFallback>
+    </Avatar>
+  );
+
   const roleTags = (u: UserType) => (
     <div className="flex gap-1">
       {u.isFounder && (
@@ -185,6 +181,8 @@ const SuperAdminUsers = () => {
       )}
     </div>
   );
+
+  const dialogRole = roleDialog?.role;
 
   return (
     <div className="space-y-6">
@@ -223,33 +221,14 @@ const SuperAdminUsers = () => {
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <User className="h-5 w-5 text-primary" />
-                    </div>
+                    {userAvatar(u)}
                     <div>
                       <p className="font-medium text-sm flex items-center gap-2">{u.name} {roleTags(u)}</p>
-                      <p className="text-xs text-muted-foreground capitalize">{u.role.replace("_", " ")}</p>
+                      <p className="text-xs text-muted-foreground">{roleLabel(u.role)}</p>
                     </div>
                   </div>
                   {statusBadge(u)}
                 </div>
-                {!locked && u.role !== "super_admin" && (
-                  <div className="space-y-1">
-                    <label htmlFor={`gender-${u.id}`} className="text-xs text-muted-foreground">{t.superAdmin.gender}</label>
-                    <Select
-                      value={u.gender || ""}
-                      onValueChange={(v) => updateUserGender(u, v as Gender)}
-                    >
-                      <SelectTrigger className="h-8" id={`gender-${u.id}`} aria-label={t.superAdmin.gender}>
-                        <SelectValue placeholder={t.auth.selectGender} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="male">{t.auth.genderMale}</SelectItem>
-                        <SelectItem value="female">{t.auth.genderFemale}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
                 <div className="flex gap-2 flex-wrap">
                   {u.status === "pending" && (
                     <span className="text-xs text-muted-foreground px-2 py-1 rounded-md bg-muted">
@@ -261,8 +240,10 @@ const SuperAdminUsers = () => {
                       {u.isActive ? t.superAdmin.deactivateUser : t.superAdmin.activateUser}
                     </Button>
                   )}
-
-
+                  <Button size="sm" variant="secondary" className="gap-1.5" onClick={() => openRoleDialog(u)} disabled={locked}>
+                    <ShieldCheck className="h-4 w-4" />
+                    {t.superAdmin.manageRole}
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -280,7 +261,6 @@ const SuperAdminUsers = () => {
                 <TableHead>{t.auth.email}</TableHead>
                 <TableHead>{t.auth.phone}</TableHead>
                 <TableHead>Role</TableHead>
-                <TableHead>{t.superAdmin.gender}</TableHead>
                 <TableHead>{t.common.status}</TableHead>
                 <TableHead>{t.common.actions}</TableHead>
               </TableRow>
@@ -291,39 +271,18 @@ const SuperAdminUsers = () => {
                 return (
                   <TableRow key={u.id}>
                     <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">{u.name} {roleTags(u)}</div>
+                      <div className="flex items-center gap-2">
+                        {userAvatar(u, "h-8 w-8")}
+                        {u.name} {roleTags(u)}
+                      </div>
                     </TableCell>
                     <TableCell>{u.email}</TableCell>
                     <TableCell>{u.phone}</TableCell>
                     <TableCell>
-                      <Select value={u.role} onValueChange={(v) => changeRole(u, v)} disabled={locked}>
-                        <SelectTrigger className="w-32 h-8">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="member">Member</SelectItem>
-                          <SelectItem value="admin">Admin</SelectItem>
-                          {isFounder && <SelectItem value="super_admin">Super Admin</SelectItem>}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      {locked || u.role === "super_admin" ? (
-                        <span className="text-xs text-muted-foreground capitalize">{u.gender || "—"}</span>
-                      ) : (
-                        <Select
-                          value={u.gender || ""}
-                          onValueChange={(v) => updateUserGender(u, v as Gender)}
-                        >
-                          <SelectTrigger className="w-28 h-8">
-                            <SelectValue placeholder={t.auth.selectGender} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="male">{t.auth.genderMale}</SelectItem>
-                            <SelectItem value="female">{t.auth.genderFemale}</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
+                      <span className="inline-flex items-center gap-1.5 text-sm">
+                        {u.role === "super_admin" && <Crown className="h-3.5 w-3.5 text-primary" />}
+                        {roleLabel(u.role)}
+                      </span>
                     </TableCell>
                     <TableCell>{statusBadge(u)}</TableCell>
                     <TableCell>
@@ -333,8 +292,10 @@ const SuperAdminUsers = () => {
                             {u.isActive ? <XCircle className="h-4 w-4 text-destructive" /> : <CheckCircle className="h-4 w-4 text-success" />}
                           </Button>
                         )}
-
-
+                        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => openRoleDialog(u)} disabled={locked}>
+                          <ShieldCheck className="h-4 w-4" />
+                          {t.superAdmin.manageRole}
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -345,62 +306,90 @@ const SuperAdminUsers = () => {
         </Card>
       </div>
 
-
-
-
-      {/* Promote to Admin (requires gender) */}
-      <Dialog open={!!adminRoleDialog} onOpenChange={() => setAdminRoleDialog(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t.superAdmin.promoteToAdmin}</DialogTitle>
-            <DialogDescription>{t.superAdmin.promoteToAdminDesc}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm font-medium">{adminRoleDialog?.user.name}</p>
-            <Select
-              value={adminRoleDialog?.gender || ""}
-              onValueChange={(v) =>
-                setAdminRoleDialog((prev) => (prev ? { ...prev, gender: v as Gender } : null))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={t.auth.selectGender} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="male">{t.auth.genderMale}</SelectItem>
-                <SelectItem value="female">{t.auth.genderFemale}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAdminRoleDialog(null)}>{t.common.cancel}</Button>
-            <Button onClick={confirmAdminRole} disabled={!adminRoleDialog?.gender}>{t.common.confirm}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Promote to Super Admin confirmation */}
-      <Dialog open={!!promoteDialog} onOpenChange={() => setPromoteDialog(null)}>
+      {/* Manage role */}
+      <Dialog open={!!roleDialog} onOpenChange={() => setRoleDialog(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Crown className="h-5 w-5 text-primary" />
-              Promote to Super Admin
+              <ShieldCheck className="h-5 w-5 text-primary" />
+              {t.superAdmin.manageRole}
             </DialogTitle>
-            <DialogDescription className="space-y-2 pt-2">
-              <p>You are about to grant <strong>{promoteDialog?.user.name}</strong> full super admin access.</p>
-              <p>They will be able to:</p>
-              <ul className="list-disc pl-5 text-sm">
-                <li>Manage all users, payments, months, and settings</li>
-                <li>Approve and deactivate members and admins</li>
-                <li>Read all payment screenshots</li>
-              </ul>
-              <p className="text-destructive text-sm">This is a high-privilege action. Proceed only if you trust this person.</p>
-            </DialogDescription>
+            <DialogDescription>{t.superAdmin.manageRoleDesc}</DialogDescription>
           </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-lg border p-3">
+              <p className="text-sm font-medium">{roleDialog?.user.name}</p>
+              <p className="text-xs text-muted-foreground">{roleDialog?.user.email}</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {t.superAdmin.currentRole}: {roleDialog ? roleLabel(roleDialog.user.role) : ""}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">{t.superAdmin.changeRole}</label>
+              <Select
+                value={roleDialog?.role}
+                onValueChange={(v) => setRoleDialog((prev) => (prev ? { ...prev, role: v as UserRole } : null))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="member">{t.superAdmin.roleMember}</SelectItem>
+                  <SelectItem value="admin">{t.superAdmin.roleAdmin}</SelectItem>
+                  {isFounder && <SelectItem value="super_admin">{t.superAdmin.roleSuperAdmin}</SelectItem>}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {dialogRole === "super_admin"
+                  ? t.superAdmin.roleSuperAdminDesc
+                  : dialogRole === "admin"
+                  ? t.superAdmin.roleAdminDesc
+                  : t.superAdmin.roleMemberDesc}
+              </p>
+            </div>
+
+            {dialogRole === "admin" && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t.superAdmin.gender}</label>
+                <Select
+                  value={roleDialog?.gender || ""}
+                  onValueChange={(v) => setRoleDialog((prev) => (prev ? { ...prev, gender: v as Gender } : null))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t.auth.selectGender} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="male">{t.auth.genderMale}</SelectItem>
+                    <SelectItem value="female">{t.auth.genderFemale}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">{t.superAdmin.promoteToAdminDesc}</p>
+              </div>
+            )}
+
+            {dialogRole === "super_admin" && (
+              <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 space-y-1">
+                <p className="text-sm font-medium">{t.superAdmin.superAdminWarningTitle}</p>
+                <ul className="list-disc pl-5 text-xs text-muted-foreground space-y-0.5">
+                  <li>{t.superAdmin.superAdminPower1}</li>
+                  <li>{t.superAdmin.superAdminPower2}</li>
+                  <li>{t.superAdmin.superAdminPower3}</li>
+                </ul>
+                <p className="text-xs text-destructive">{t.superAdmin.superAdminWarningNote}</p>
+              </div>
+            )}
+          </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPromoteDialog(null)}>{t.common.cancel}</Button>
-            <Button onClick={confirmPromote}>Confirm promotion</Button>
+            <Button variant="outline" onClick={() => setRoleDialog(null)}>{t.common.cancel}</Button>
+            <Button
+              onClick={confirmRoleChange}
+              disabled={savingRole || (dialogRole === "admin" && !roleDialog?.gender)}
+            >
+              {savingRole ? t.common.loading : t.common.confirm}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

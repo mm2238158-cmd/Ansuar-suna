@@ -102,7 +102,8 @@ service cloud.firestore {
             "name",
             "phone",
             "language",
-            "gender"
+            "gender",
+            "photoURL"
           ])
           && request.resource.data.name is string
           && request.resource.data.name.size() >= 2

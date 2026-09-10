@@ -3,12 +3,20 @@ import { NavLink } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { cn } from "@/lib/utils";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import logo from "@/assets/logo.png";
 
 const DesktopSidebar = () => {
   const { appUser, logout } = useAuth();
   const { t } = useLanguage();
   const role = appUser?.role;
+
+  const initials = (appUser?.name || "U")
+    .split(" ")
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 
   const memberLinks = [
     { to: "/", icon: Home, label: t.nav.home },
@@ -37,8 +45,8 @@ const DesktopSidebar = () => {
   const links = role === "super_admin" ? superAdminLinks : role === "admin" ? adminLinks : memberLinks;
 
   return (
-    <aside className="hidden md:flex md:w-64 md:flex-col md:border-r bg-card min-h-screen">
-      <div className="flex items-center gap-3 p-6 border-b">
+    <aside className="hidden md:flex md:fixed md:inset-y-0 md:left-0 md:z-40 md:w-64 md:flex-col md:border-r md:h-screen bg-card">
+      <div className="flex items-center gap-3 p-6 border-b shrink-0">
         <img src={logo} alt="Ansuarusuna" className="h-10 w-10 rounded-full object-cover" />
         <div>
           <h2 className="font-semibold text-sm text-foreground">{t.common.appName}</h2>
@@ -46,7 +54,7 @@ const DesktopSidebar = () => {
         </div>
       </div>
 
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {links.map((link) => (
           <NavLink
             key={link.to}
@@ -67,7 +75,17 @@ const DesktopSidebar = () => {
         ))}
       </nav>
 
-      <div className="p-4 border-t">
+      <div className="p-4 border-t shrink-0 space-y-3">
+        <NavLink to="/profile" className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-accent transition-colors">
+          <Avatar className="h-9 w-9 ring-2 ring-primary/30">
+            {appUser?.photoURL && <AvatarImage src={appUser.photoURL} alt={appUser?.name || "Profile"} />}
+            <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">{initials}</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0">
+            <p className="text-sm font-medium truncate">{appUser?.name}</p>
+            <p className="text-xs text-muted-foreground truncate">{appUser?.email}</p>
+          </div>
+        </NavLink>
         <button
           onClick={logout}
           className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors w-full"
