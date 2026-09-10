@@ -24,6 +24,7 @@ export interface AppUser {
   emailVerified?: boolean;
   phoneVerified?: boolean;
   activatedAt?: Timestamp;
+  photoURL?: string;
 }
 
 export interface Month {
