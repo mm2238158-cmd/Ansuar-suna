@@ -308,7 +308,16 @@ const en = {
     editProfile: "Edit Profile",
     updateSuccess: "Profile updated successfully!",
     languagePreference: "Language Preference",
+    uploadPhoto: "Upload photo",
+    changePhoto: "Change photo",
+    removePhoto: "Remove photo",
+    photoHelp: "JPG or PNG image, up to 1 MB.",
+    photoTooLarge: "That image is larger than 1 MB. Please choose a smaller one.",
+    photoInvalidType: "Please choose an image file.",
+    photoUpdated: "Profile photo updated",
+    photoRemoved: "Profile photo removed",
   },
+
   toasts: {
     error: "Error",
     success: "Success",
