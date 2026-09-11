@@ -310,6 +310,15 @@ const om: TranslationKeys = {
     editProfile: "Piroofaayilii gulaali",
     updateSuccess: "Piroofaayiliin milkaa'inaan haarome!",
     languagePreference: "Filannoo afaanii",
+    uploadPhoto: "Suuraa ol kaa'i",
+    changePhoto: "Suuraa jijjiiri",
+    removePhoto: "Suuraa haqi",
+    photoHelp: "Suuraa JPG ykn PNG, hanga 1 MB.",
+    photoTooLarge: "Suuraan kun 1 MB caala. Maaloo kan xiqqaa filadhu.",
+    photoInvalidType: "Maaloo faayilii suuraa filadhu.",
+    photoUpdated: "Suuraan piroofaayilii haaromfame",
+    photoRemoved: "Suuraan piroofaayilii haqame",
+
   },
   toasts: {
     error: "Dogoggora",
