@@ -310,6 +310,15 @@ const am: TranslationKeys = {
     editProfile: "መገለጫ አስተካክል",
     updateSuccess: "መገለጫ በተሳካ ሁኔታ ተዘምኗል!",
     languagePreference: "የቋንቋ ምርጫ",
+    uploadPhoto: "ፎቶ ጫን",
+    changePhoto: "ፎቶ ቀይር",
+    removePhoto: "ፎቶ አስወግድ",
+    photoHelp: "JPG ወይም PNG ምስል፣ እስከ 1 ሜባ።",
+    photoTooLarge: "ምስሉ ከ1 ሜባ ይበልጣል። እባክዎ ትንሽ ይምረጡ።",
+    photoInvalidType: "እባክዎ የምስል ፋይል ይምረጡ።",
+    photoUpdated: "የመገለጫ ፎቶ ተዘምኗል",
+    photoRemoved: "የመገለጫ ፎቶ ተወግዷል",
+
   },
   toasts: {
     error: "ስህተት",
